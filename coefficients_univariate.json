@@ -1,0 +1,99 @@
+{
+  "clients": {
+    "client01": {
+      "coefficient": 0.7487
+    },
+    "client02": {
+      "coefficient": -1.9979
+    },
+    "client03": {
+      "coefficient": 0.6170
+    },
+    "client04": {
+      "coefficient": 0.2313
+    },
+    "client05": {
+      "coefficient": 1.3289
+    },
+    "client06": {
+      "coefficient": -1.0035
+    },
+    "client07": {
+      "coefficient": -1.5380
+    },
+    "client08": {
+      "coefficient": 0.3086
+    },
+    "client09": {
+      "coefficient": 0.0045
+    },
+    "client10": {
+      "coefficient": 0.0476
+    },
+    "client11": {
+      "coefficient": 0.7841
+    },
+    "client12": {
+      "coefficient": 0.0890
+    },
+    "client13": {
+      "coefficient": -0.9369
+    },
+    "client14": {
+      "coefficient": 0.7389
+    },
+    "client15": {
+      "coefficient": 0.5426
+    },
+    "client16": {
+      "coefficient": 0.0349
+    }
+  },
+  "servers": {
+    "gru03": {
+      "coefficient": -0.4197
+    },
+    "gru05": {
+      "coefficient": 1.5070
+    },
+    "gru06": {
+      "coefficient": 1.8974
+    },
+    "rnp_rj": {
+      "coefficient": -1.7618
+    },
+    "rnp_sp": {
+      "coefficient": -1.2229
+    }
+  },
+  "metrics": {
+    "averages": {
+      "throughput_download": {
+        "coefficient": -0.0150
+      },
+      "throughput_upload": {
+        "coefficient": 0.6859
+      },
+      "rtt_download": {
+        "coefficient": -1.5921
+      },
+      "rtt_upload": {
+        "coefficient": -0.6199
+      }
+    },
+    "standard_deviations": {
+      "throughput_download": {
+        "coefficient": -1.0413
+      },
+      "throughput_upload": {
+        "coefficient": 0.1860
+      },
+      "rtt_download": {
+        "coefficient": -0.3346
+      },
+      "rtt_upload": {
+        "coefficient": 0.9051
+      }
+    }
+  }
+}
