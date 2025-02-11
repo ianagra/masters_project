@@ -110,27 +110,12 @@ def vwcd(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=Fa
         p = ll[tau] + np.log(prior[tau]) - lse
         return np.exp(p)
 
-    def votes_pos(vote_list, prior_v, eps=1e-10, max_prob=0.9999):
+    def votes_pos(vote_list, prior_v):
         vote_list = np.array(vote_list)
-        n_votes = len(vote_list)
-        
-        # Limitar probabilidades individuais
-        vote_list = np.clip(vote_list, eps, max_prob)
-        
-        # Calcular log-probabilidades normalizadas por voto
-        log_prob1 = np.sum(np.log(vote_list)) / n_votes
-        log_prob2 = np.sum(np.log(1 - vote_list)) / n_votes
-        
-        # Adicionar prior logístico
-        log_prob1 += np.log(prior_v) / n_votes
-        log_prob2 += np.log(1 - prior_v) / n_votes
-        
-        # Log-sum-exp trick para estabilidade numérica
-        c = max(log_prob1, log_prob2)
-        p = np.exp(log_prob1 - c) / (np.exp(log_prob1 - c) + np.exp(log_prob2 - c))
-        
-        # Garantir resultado no intervalo [eps, 1-eps]
-        return np.clip(p, eps, 1-eps)
+        prod1 = vote_list.prod() * prior_v
+        prod2 = (1 - vote_list).prod() * (1 - prior_v)
+        p = prod1 / (prod1 + prod2)
+        return p
 
     def logistic_prior(x, w, y0, yw):
         a = np.log((1 - y0) / y0)
@@ -144,7 +129,7 @@ def vwcd(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=Fa
     vote_n_thr = np.floor(w * vote_n_thr)
     i_ = np.arange(0, w - 3)
     prior_w = betabinom(n=w - 4, a=ab, b=ab).pmf(i_)
-    x_votes = np.arange(w + 1)
+    x_votes = np.arange(1, w + 1)
     prior_v = logistic_prior(x_votes, w, y0, yw)
 
     votes = {i: [] for i in range(N)}
@@ -203,12 +188,10 @@ def vwcd(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=Fa
             votes_list = votes[n - w + 1]
             num_votes = len(votes_list)
             if num_votes >= vote_n_thr:
-                print(f'Votos: {votes_list}; prior: {prior_v[num_votes - 1]}')
                 if aggreg == 'posterior':
                     agg_vote = votes_pos(votes_list, prior_v[num_votes - 1])
                 elif aggreg == 'mean':
                     agg_vote = np.mean(votes_list)
-                print(f'Probabilidade agregada: {agg_vote}')
                 agg_probs[n - w + 1] = agg_vote  # Armazenar probabilidade agregada
 
                 if agg_vote > vote_p_thr:
@@ -249,6 +232,7 @@ def validate_covariance(cov, d, regularization_factor=1e-4):
     # Adicionar regularização
     return cov + regularization_factor * np.eye(d)
 
+
 def loglik_mv(X, mean, cov):
     n, d = X.shape
     cov = validate_covariance(cov, d)
@@ -271,6 +255,7 @@ def loglik_mv(X, mean, cov):
         
     except np.linalg.LinAlgError:
         return -np.inf
+
 
 def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=False):
     """
@@ -320,7 +305,7 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
         y = 1 / (1 + np.exp(-k * (x - x0)))
         return y
 
-    def votes_pos(vote_list, prior_v, eps=1e-10, max_prob=0.9999):
+    def votes_pos(vote_list, prior_v, eps=1e-10, max_prob=0.9999, penalty_factor=1.5):
         vote_list = np.array(vote_list)
         n_votes = len(vote_list)
         
@@ -334,6 +319,10 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
         # Adicionar prior logístico
         log_prob1 += np.log(prior_v) / n_votes
         log_prob2 += np.log(1 - prior_v) / n_votes
+        
+        # Penalização adicional para maior estabilidade
+        log_prob1 *= penalty_factor
+        log_prob2 *= penalty_factor
         
         # Log-sum-exp trick para estabilidade numérica
         c = max(log_prob1, log_prob2)

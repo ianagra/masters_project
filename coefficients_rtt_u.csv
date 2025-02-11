@@ -1,0 +1,30 @@
+feature,type,coefficient
+client01,client,0.19990342299947406
+client02,client,-0.3182178467196461
+client03,client,1.5592703176359128
+client04,client,-0.6695890075666658
+client05,client,0.8180587555041033
+client06,client,0.025676045573819358
+client07,client,-0.15445784420204275
+client08,client,-0.380156905474482
+client09,client,-0.7955366856942805
+client10,client,-0.03881198649010957
+client11,client,0.04484140777331994
+client12,client,-0.05509377180016493
+client13,client,0.3307115203336197
+client14,client,-0.01435844074432262
+client15,client,0.14122677500643355
+client16,client,-0.6933836256043583
+gru03,server,0.19877100723702348
+gru05,server,0.6680992869484432
+gru06,server,0.840892084948279
+rnp_rj,server,-1.7626019029254003
+rnp_sp,server,0.054921654322264084
+throughput_download,metric (mean),2.154480501537644
+throughput_upload,metric (mean),1.0485512569459057
+rtt_download,metric (mean),-0.025309916234142846
+rtt_upload,metric (mean),0.7355390691153858
+throughput_download_std,metric (standard deviation),0.18455339577343047
+throughput_upload_std,metric (standard deviation),0.3089310933436215
+rtt_download_std,metric (standard deviation),-0.7568480333239223
+rtt_upload_std,metric (standard deviation),-0.4134749207409677
