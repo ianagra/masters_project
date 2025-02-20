@@ -13,12 +13,12 @@ class NetworkTools:
     def __init__(self):
         """Inicializa a classe NetworkTools carregando o dataset de sobrevivência e os coeficientes da regressão logística"""
         try:
-            self.df_surv = pd.read_csv('dataset_survival_thr_d.csv')
+            self.df_surv = pd.read_csv('dataset_survival_rtt_u.csv')
         except Exception as e:
             print(f"Error loading CSV: {e}")
             self.df_surv = pd.DataFrame()
         try:
-            self.df_coef = pd.read_csv('coefficients_thr_d.csv')
+            self.df_coef = pd.read_csv('coefficients_rtt_u.csv')
             self.df_coef['odds_ratio'] = np.exp(self.df_coef['coefficient'])
         except Exception as e:
             print(f"Error loading CSV: {e}")
@@ -256,14 +256,15 @@ class NetworkTools:
     # Método para análise de desempenho de um cliente específico
     def analyze_client(self, client_id: str) -> Dict:
         """
-        Analisa o desempenho detalhado de um cliente específico.
+        Analisa o desempenho detalhado de um cliente específico, incluindo os pontos de mudança.
         """
         client_data = self.df_surv[self.df_surv['client'] == client_id]
         client_coef = self.df_coef[self.df_coef['feature'] == client_id]
-        
+            
         if len(client_data) == 0:
             return {"error": f"No data found for client {client_id}"}
-            
+                
+        # Análise geral e métricas
         performance = {
             'general_stats': {
                 'total_intervals': len(client_data),
@@ -273,7 +274,7 @@ class NetworkTools:
                 },
                 'avg_interval_length_days': float(client_data['time'].mean()),
                 'total_events': int(client_data['event'].sum()),
-                'cluster_1_odds_ratio': float(client_coef['odds_ratio'].iloc[0])
+                'odds_ratio_for_cluster_1': float(client_coef['odds_ratio'].iloc[0]) if not client_coef.empty else None
             },
             'metrics': {
                 'throughput_download': {
@@ -294,6 +295,46 @@ class NetworkTools:
                 }
             }
         }
+        
+        # Processamento dos pontos de mudança
+        # Filtrar apenas os dados do cliente e ordenar
+        df_cliente = client_data.sort_values(by=['site', 'timestamp_start']).copy()
+        
+        # Identificar os pontos de mudança (event = 1)
+        pontos_mudanca = df_cliente[df_cliente['event'] == 1].copy()
+        change_points = []
+        
+        # Calcular as diferenças de métricas para cada ponto de mudança
+        for idx, mudanca in pontos_mudanca.iterrows():
+            # Encontrar o próximo intervalo para o mesmo par cliente-servidor
+            proximo_intervalo = df_cliente[
+                (df_cliente['site'] == mudanca['site']) & 
+                (pd.to_datetime(df_cliente['timestamp_start']) > pd.to_datetime(mudanca['timestamp_end']))
+            ].sort_values('timestamp_start').head(1)
+            
+            # Se não houver próximo intervalo, pular o ponto de mudança
+            if proximo_intervalo.empty:
+                continue
+                
+            proximo = proximo_intervalo.iloc[0]
+            
+            # Calcular as diferenças de métricas
+            resultado = {
+                'timestamp': str(mudanca['timestamp_end']),
+                'server': mudanca['site'],
+                'interval_length': float(mudanca['time']),
+                'cluster_before_changepoint': int(mudanca['cluster']),
+                'cluster_after_changepoint': int(proximo['cluster']),
+                'throughput_download_difference': float(proximo['throughput_download'] - mudanca['throughput_download']),
+                'throughput_upload_difference': float(proximo['throughput_upload'] - mudanca['throughput_upload']),
+                'rtt_download_difference': float(proximo['rtt_download'] - mudanca['rtt_download']),
+                'rtt_upload_difference': float(proximo['rtt_upload'] - mudanca['rtt_upload'])
+            }
+            
+            change_points.append(resultado)
+        
+        # Adicionar os pontos de mudança ao resultado
+        performance['change_points'] = change_points
         
         return performance
 
@@ -330,6 +371,44 @@ class NetworkTools:
                 }
             }
         }
+
+        # Processamento dos pontos de mudança
+        # Filtrar apenas os dados do servidor e ordenar
+        df_servidor = server_data.sort_values(by=['client', 'timestamp_start']).copy()
+
+        # Identificar os pontos de mudança
+        pontos_mudanca = df_servidor[df_servidor['event'] == 1].copy()
+        change_points = []
+
+        # Calcular as diferenças de métricas para cada ponto de mudança
+        for idx, mudanca in pontos_mudanca.iterrows():
+            # Encontrar o próximo intervalo para o mesmo par cliente-servidor
+            proximo_intervalo = df_servidor[
+                (df_servidor['client'] == mudanca['client']) & 
+                (pd.to_datetime(df_servidor['timestamp_start']) > pd.to_datetime(mudanca['timestamp_end']))
+            ].sort_values('timestamp_start').head(1)
+
+            # Se não houver próximo intervalo, pular o ponto de mudança
+            if proximo_intervalo.empty:
+                continue
+
+            proximo = proximo_intervalo.iloc[0]
+
+            # Calcular as diferenças de métricas
+            resultado = {
+                'timestamp': str(mudanca['timestamp_end']),
+                'client': mudanca['client'],
+                'interval_length': float(mudanca['time']),
+                'cluster_before_changepoint': int(mudanca['cluster']),
+                'cluster_after_changepoint': int(proximo['cluster']),
+                'throughput_download_difference': float(proximo['throughput_download'] - mudanca['throughput_download']),
+                'rtt_download_difference': float(proximo['rtt_download'] - mudanca['rtt_download'])
+            }
+
+            change_points.append(resultado)
+
+        # Adicionar os pontos de mudança ao resultado
+        performance['change_points'] = change_points
         
         return performance
 
@@ -392,7 +471,7 @@ class NetworkTools:
         return analysis
 
 class NetworkAgent:
-    def __init__(self, model_name: str = 'qwen2.5:32b', base_url: str = 'http://10.246.47.169:10000'):
+    def __init__(self, model_name: str = 'MFDoom/deepseek-r1-tool-calling:14b', base_url: str = 'http://10.246.47.169:10000'):
         self.tools = NetworkTools()
         self.logger = ConversationLogger()
         
@@ -641,9 +720,9 @@ Include:
             return f"An error occurred: {str(e)}"
         
 class ConversationLogger:
-    def __init__(self, filename_prefix="question_answering_log_qwen2.5-32b"):
+    def __init__(self, filename_prefix="question_answering_log_deepseek-r1-tool-calling-14b"):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.filename = f"{filename_prefix}_{timestamp}.txt"
+        self.filename = f"chat_logs/{filename_prefix}_{timestamp}.txt"
         # Limpar o arquivo de log anterior
         with open(self.filename, 'w', encoding='utf-8') as f:
             f.write("New Conversation Log\n")

@@ -274,7 +274,7 @@ def detect_changepoints(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, agg
     print(f"Changepoints, contagem de votos e estatísticas locais detectados e salvos em: {output_dir}")
 
 
-def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg):
+def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, nu):
     """
     Detecta pontos de mudança em séries temporais multivariadas.
     
@@ -304,7 +304,7 @@ def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, 
             kargs = {
                 'X': X, 'w': wv, 'w0': wv, 'ab': ab,
                 'p_thr': p_thr, 'vote_p_thr': vote_p_thr,
-                'vote_n_thr': vote_n_thr, 'y0': y0, 'yw': yw, 'aggreg': aggreg
+                'vote_n_thr': vote_n_thr, 'y0': y0, 'yw': yw, 'aggreg': aggreg, 'nu': nu
             }
             
             CP, M0, S0, _, vote_counts, vote_probs, agg_probs = vwcd_mv(**kargs)

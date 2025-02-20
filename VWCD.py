@@ -246,12 +246,12 @@ def loglik_mv(X, mean, cov):
         diff = X - mean
         mahal = np.sum(np.dot(diff, inv_cov) * diff, axis=1)
 
-        # Penalização pela dimensionalidade (exemplo usando BIC)
-        bic_penalty = 0.5 * d * np.log(n)  # Opcional: ajuste conforme necessário
+        # Penalização pela dimensionalidade usando BIC
+        bic_penalty = 0.5 * d * np.log(n)
         
         # Normalizar pela dimensionalidade
         const = -0.5 * (d * np.log(2 * np.pi) + logdet)
-        return (n * const - 0.5 * np.sum(mahal) - bic_penalty) / d
+        return (n * const - 0.5 * np.sum(mahal) - bic_penalty)
         
     except np.linalg.LinAlgError:
         return -np.inf
@@ -305,31 +305,25 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
         y = 1 / (1 + np.exp(-k * (x - x0)))
         return y
 
-    def votes_pos(vote_list, prior_v, eps=1e-10, max_prob=0.9999, penalty_factor=1.5):
-        vote_list = np.array(vote_list)
+    def votes_pos(vote_list, prior_v, eps=1e-10, max_prob=0.9999, penalty_factor=1.0):
+        vote_list = np.clip(np.array(vote_list), eps, max_prob)
         n_votes = len(vote_list)
         
-        # Limitar probabilidades individuais
-        vote_list = np.clip(vote_list, eps, max_prob)
-        
-        # Calcular log-probabilidades normalizadas por voto
         log_prob1 = np.sum(np.log(vote_list)) / n_votes
         log_prob2 = np.sum(np.log(1 - vote_list)) / n_votes
-        
-        # Adicionar prior logístico
+
         log_prob1 += np.log(prior_v) / n_votes
         log_prob2 += np.log(1 - prior_v) / n_votes
-        
-        # Penalização adicional para maior estabilidade
+
+        # Usar penalty_factor=1.0 (ou remover a multiplicação) para não exagerar a influência
         log_prob1 *= penalty_factor
         log_prob2 *= penalty_factor
-        
-        # Log-sum-exp trick para estabilidade numérica
+
         c = max(log_prob1, log_prob2)
         p = np.exp(log_prob1 - c) / (np.exp(log_prob1 - c) + np.exp(log_prob2 - c))
-        
-        # Garantir resultado no intervalo [eps, 1-eps]
+
         return np.clip(p, eps, 1-eps)
+
 
     def pos_fun(ll, prior):
         """
