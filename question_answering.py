@@ -471,11 +471,11 @@ class NetworkTools:
         return analysis
 
 class NetworkAgent:
-    def __init__(self, model_name: str = 'MFDoom/deepseek-r1-tool-calling:14b', base_url: str = 'http://10.246.47.169:10000'):
+    def __init__(self, llama_base_url: str = 'http://10.246.47.169:10000', phi_base_url: str = 'http://10.246.47.169:10000'):
         self.tools = NetworkTools()
         self.logger = ConversationLogger()
         
-        # Removida a duplicação de declaração de ferramentas
+        # Initialize the tool definitions
         self.analyze_clusters_tool = StructuredTool.from_function(
             func=self.tools.analyze_clusters,
             name="analyze_clusters",
@@ -521,9 +521,16 @@ class NetworkAgent:
             'analyze_pair': self.analyze_pair_tool
         }
         
-        self.model = ChatOllama(
-            model=model_name,
-            base_url=base_url,
+        # Initialize models
+        self.tool_selector_model = ChatOllama(
+            model="llama3.2",
+            base_url=llama_base_url,
+            temperature=0,
+        )
+        
+        self.analysis_model = ChatOllama(
+            model="phi4",
+            base_url=phi_base_url,
             temperature=0,
         )
         
@@ -540,9 +547,9 @@ class NetworkAgent:
         
         self.chat_history = []
         
-        # Log dos contextos do sistema
-        self.logger.log_system_prompt(self._get_tool_selection_context())
-        self.logger.log_system_prompt(self._get_analysis_context())
+        # Log the system contexts
+        self.logger.log_system_prompt("LLAMA 3.2 - Tool Selection", self._get_tool_selection_context())
+        self.logger.log_system_prompt("PHI 4 - Analysis", self._get_analysis_context())
 
     def _get_tool_selection_context(self) -> str:
         return """You are a computer networks specialist.
@@ -616,17 +623,19 @@ When analyzing temporal evolution:
 When analyzing clients or servers:
 - Always consider the number of events, the time between changes and the odds ratios for cluster membership
 - Highlight the key differences between clients or servers
+- Provide clear, actionable insights and specific recommendations based on the data
 
 When comparing clusters:
 - Explain the characteristics of each cluster
 - Highlight the key differences between clusters
 - Indicate which represents better performance
 
-Provide clear, actionable insights and specific recommendations based on the data.
 Respond in clear language suitable for network operators."""
 
     def _extract_tool_call(self, response: str) -> tuple:
-        """Extrai a ferramenta e parâmetros da resposta do modelo"""
+        """
+        Extrai a ferramenta e parâmetros da resposta do modelo
+        """
         try:
             # Clean the response to extract only the JSON part
             json_str = response.strip()
@@ -645,35 +654,35 @@ Respond in clear language suitable for network operators."""
             return None, None
 
     def process_question(self, question: str) -> str:
-        """Processa uma pergunta do usuário e retorna a análise"""
+        """
+        Processa uma pergunta do usuário e retorna a análise
+        """
         try:
-            # 1. Registrar pergunta do usuário
+            # 1. Log user question
             self.logger.log_user_prompt(question)
             
-            # 2. Selecionar ferramenta
+            # 2. Select tool using LLAMA 3.2
             tool_selection = self.tool_selector_prompt.invoke({
                 "input": question
             }).to_messages()
             
-            tool_response = self.model.invoke(tool_selection)
+            tool_response = self.tool_selector_model.invoke(tool_selection)
+            self.logger.log_llm_response("LLAMA 3.2 - Tool Selection", tool_response.content)
+            
             tool_name, parameters = self._extract_tool_call(tool_response.content)
             
             if not tool_name or tool_name not in self.tool_names:
                 return f"I couldn't determine how to analyze this question. Please try rephrasing it.\nDebug info - Response: {tool_response.content}"
             
-            # 3. Executar e registrar ferramenta
+            # 3. Execute and log tool call
             tool = self.tool_names[tool_name]
-            if tool_name == 'analyze_clusters':
-                data = tool.invoke(input="")
-            elif tool_name == 'analyze_all_clients':
-                data = tool.invoke(input="")
-            elif tool_name == 'analyze_all_servers':
+            if tool_name in ['analyze_clusters', 'analyze_all_clients', 'analyze_all_servers']:
                 data = tool.invoke(input="")
             elif tool_name == 'analyze_pair':
                 data = tool.invoke(input={
                     'client_id': parameters['client_id'],
                     'server_id': parameters['server_id']
-                    })
+                })
             else:
                 data = tool.invoke(input=next(iter(parameters.values())))
             
@@ -682,7 +691,7 @@ Respond in clear language suitable for network operators."""
             if not data:
                 return "There was an error analyzing the data. Please try again."
             
-            # 4. Preparar e registrar análise
+            # 4. Prepare and log analysis using PHI 4
             analysis_prompt = f"""Based on this network performance data:
 
 {json.dumps(data, indent=2)}
@@ -692,23 +701,19 @@ Respond in clear language suitable for network operators."""
 Answer in clear language, suitable for network operators.
 If you have already analyzed the clusters, keep in mind which cluster represents better performance.
 Always compare the metrics with the time between changes, the interval length, and the Odds Ratio related to Cluster 1.
-
-Include:
-1. A detailed analysis of the performance patterns
-2. Identification of any issues or anomalies
-3. Specific recommendations for performance improvement"""
+"""
             
-            self.logger.log_llm_prompt(analysis_prompt)  # Novo registro
+            self.logger.log_llm_prompt("PHI 4 - Analysis", analysis_prompt)
             
             response = self.analysis_prompt.invoke({
                 "input": analysis_prompt,
                 "chat_history": self.chat_history
             }).to_messages()
             
-            analysis = self.model.invoke(response)
-            self.logger.log_llm_response(analysis.content)  # Novo registro
+            analysis = self.analysis_model.invoke(response)
+            self.logger.log_llm_response("PHI 4 - Analysis", analysis.content)
             
-            # 5. Atualizar histórico
+            # 5. Update history
             self.chat_history.extend([
                 HumanMessage(content=analysis_prompt),
                 AIMessage(content=analysis.content)
@@ -720,20 +725,23 @@ Include:
             return f"An error occurred: {str(e)}"
         
 class ConversationLogger:
-    def __init__(self, filename_prefix="question_answering_log_deepseek-r1-tool-calling-14b"):
+    def __init__(self, filename_prefix="qa_log"):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.filename = f"chat_logs/{filename_prefix}_{timestamp}.txt"
-        # Limpar o arquivo de log anterior
+        self.filename = f"chat_logs/{filename_prefix}_llama32_phi4_{timestamp}.txt"
+        # Clear previous log file
         with open(self.filename, 'w', encoding='utf-8') as f:
             f.write("New Conversation Log\n")
         self.conversation = []
 
-    def _write_to_file(self, entry_type: str, content) -> bool:
-        """Escreve uma entrada no arquivo de log"""
+    def _write_to_file(self, entry_type: str, model: str, content) -> bool:
+        """Write an entry to the log file"""
         try:
             with open(self.filename, 'a', encoding='utf-8') as f:
                 f.write(f"\n{'='*50}\n")
-                f.write(f"{entry_type}:\n")
+                if model:
+                    f.write(f"{model} - {entry_type}:\n")
+                else:
+                    f.write(f"{entry_type}:\n")
                 f.write(f"{'='*50}\n")
                 
                 if isinstance(content, dict):
@@ -755,55 +763,56 @@ class ConversationLogger:
             print(f"Error writing to log file: {str(e)}")
             return False
 
-    def log_system_prompt(self, prompt):
-        """Registra o prompt do sistema"""
-        success = self._write_to_file("SYSTEM PROMPT", prompt)
+    def log_system_prompt(self, model: str, prompt):
+        """Log the system prompt"""
+        success = self._write_to_file("SYSTEM PROMPT", model, prompt)
         if success:
-            self.conversation.append(("SYSTEM PROMPT", prompt))
+            self.conversation.append(("SYSTEM PROMPT", model, prompt))
 
     def log_user_prompt(self, prompt):
-        """Registra o prompt do usuário"""
-        success = self._write_to_file("USER PROMPT", prompt)
+        """Log the user prompt"""
+        success = self._write_to_file("USER PROMPT", "", prompt)
         if success:
-            self.conversation.append(("USER PROMPT", prompt))
+            self.conversation.append(("USER PROMPT", "", prompt))
 
     def log_tool_call(self, tool_name, parameters, result):
-        """Registra uma chamada de ferramenta e seu resultado"""
+        """Log a tool call and its result"""
         content = {
             "tool": tool_name,
             "parameters": parameters,
             "result": result
         }
-        success = self._write_to_file("TOOL CALL", content)
+        success = self._write_to_file("TOOL CALL", "", content)
         if success:
-            self.conversation.append(("TOOL CALL", content))
+            self.conversation.append(("TOOL CALL", "", content))
 
-    def log_llm_prompt(self, prompt):
-        """Registra o prompt enviado ao modelo"""
-        success = self._write_to_file("LLM PROMPT", prompt)
+    def log_llm_prompt(self, model: str, prompt):
+        """Log the prompt sent to the model"""
+        success = self._write_to_file("LLM PROMPT", model, prompt)
         if success:
-            self.conversation.append(("LLM PROMPT", prompt))
+            self.conversation.append(("LLM PROMPT", model, prompt))
 
-    def log_llm_response(self, response):
-        """Registra a resposta do modelo"""
-        success = self._write_to_file("LLM RESPONSE", response)
+    def log_llm_response(self, model: str, response):
+        """Log the model's response"""
+        success = self._write_to_file("LLM RESPONSE", model, response)
         if success:
-            self.conversation.append(("LLM RESPONSE", response))
+            self.conversation.append(("LLM RESPONSE", model, response))
 
     def save(self):
-        """Verifica e reescreve todo o log para garantir completude"""
+        """Verify and rewrite the entire log to ensure completeness"""
         try:
-            # Verificar se tem algo para salvar
             if not self.conversation:
-                print("No conversation data to save")  # Debug
+                print("No conversation data to save")
                 return
             
-            # Reescrever todo o log
             with open(self.filename, 'w', encoding='utf-8') as f:
                 f.write("Complete Conversation Log\n")
-                for entry_type, content in self.conversation:
+                for entry_type, model, content in self.conversation:
                     f.write(f"\n{'='*50}\n")
-                    f.write(f"{entry_type}:\n")
+                    if model:
+                        f.write(f"{model} - {entry_type}:\n")
+                    else:
+                        f.write(f"{entry_type}:\n")
                     f.write(f"{'='*50}\n")
                     
                     if isinstance(content, dict):
