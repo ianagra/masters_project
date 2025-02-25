@@ -1,0 +1,825 @@
+==================================================
+SYSTEM PROMPT:
+==================================================
+You are a computer networks specialist analyzing network performance data collected from an ISP network.
+
+The data was processed as follows:
+
+1. Change points were detected in download throughput time series for each client-server pair.
+2. Intervals between changes were analyzed using survival analysis.
+3. Intervals were clustered into 2 groups based on:
+- Interval duration, in days;
+- Associated metrics (throughput, RTT);
+- Client and server IDs; and
+- Event occurrence (1) or censored data (0).
+4. Logistic regression was used to determine feature importance for cluster membership.
+
+Keep responses direct and actionable. Focus on identifying specific elements needing intervention.
+Always base your analysis on the data provided.
+
+When analyzing temporal evolution:
+- Look for trends and patterns in the data
+- Identify periods of degraded performance
+- Note any improvements or deteriorations over time
+
+When analyzing clients or servers:
+- Always consider the number of events, the time between changes and the odds ratios for cluster membership
+- Highlight the key differences between clients or servers
+- Provide clear, actionable insights and specific recommendations based on the data
+
+When comparing clusters:
+- Explain the characteristics of each cluster
+- Highlight the key differences between clusters
+- Indicate which represents better performance
+
+Respond in clear language suitable for network operators.
+
+
+==================================================
+USER PROMPT:
+==================================================
+Based on this network performance data:
+
+{
+  "cluster_0": {
+    "throughput_download": {
+      "mean": 466.63241118057044,
+      "std": 94.94583921983535
+    },
+    "throughput_upload": {
+      "mean": 451.7642906535843,
+      "std": 60.84713502638169
+    },
+    "rtt_download": {
+      "mean": 56.15417066685713,
+      "std": 7.6638054697947275
+    },
+    "rtt_upload": {
+      "mean": 57.746951273740684,
+      "std": 7.955948984027765
+    },
+    "time_intervals_days": {
+      "mean": 12.00053616116116,
+      "median": 7.29630787037037,
+      "std": 15.041905299668318,
+      "min": 0.2456944444444444,
+      "max": 79.54020833333334
+    },
+    "sample_size": 111
+  },
+  "cluster_1": {
+    "throughput_download": {
+      "mean": 631.3540109954033,
+      "std": 84.48944430715324
+    },
+    "throughput_upload": {
+      "mean": 681.1546952026968,
+      "std": 70.03009411413088
+    },
+    "rtt_download": {
+      "mean": 16.262777173663828,
+      "std": 3.750695238334119
+    },
+    "rtt_upload": {
+      "mean": 18.779956308180175,
+      "std": 4.619607001275187
+    },
+    "time_intervals_days": {
+      "mean": 24.008358384069005,
+      "median": 19.184369212962963,
+      "std": 22.617694982375113,
+      "min": 0.2432754629629629,
+      "max": 83.44619212962964
+    },
+    "sample_size": 146
+  }
+}
+
+Which cluster is the best and why?
+
+Answer in clear language, suitable for network operators.
+If you have already analyzed the clusters, keep in mind which cluster represents better performance.
+Always compare the metrics with the time between changes, the interval length, and the Odds Ratio related to Cluster 1.
+
+
+==================================================
+LLM RESPONSE:
+==================================================
+**Final Answer:**
+
+Based on the analysis of the network performance data, **cluster_1** is identified as the better-performing cluster. Here's why:
+
+1. **Throughput**: Cluster_1 demonstrates higher download (631 Mbps) and upload (681 Mbps) speeds compared to cluster_0 (467 Mbps and 452 Mbps respectively). This indicates superior data transfer capabilities.
+
+2. **RTT (Round Trip Time)**: Cluster_1 shows significantly lower RTTs for both download (16.27 ms vs. 56.15 ms) and upload (18.78 ms vs. 57.75 ms), which is crucial for a responsive network experience.
+
+3. **Time Intervals**: While cluster_0 has more frequent changes, the performance metrics of cluster_1 are more favorable despite longer intervals between changes.
+
+4. **Sample Size**: Cluster_1 has a larger sample size (146 vs. 111), which may contribute to more reliable and consistent performance data.
+
+**Recommendations for Network Operators:**
+
+- **Replicate Conditions of Cluster_1**: Investigate the configurations, routing, hardware, or software used by devices in cluster_1 to replicate these conditions elsewhere.
+  
+- **Migrate Devices**: Consider strategies to transition devices from cluster_0's environment to that of cluster_1 to potentially improve overall network performance.
+
+- **Monitor Time Intervals**: Although cluster_1 has longer intervals, ensure they do not negatively impact data freshness or packet loss. If issues arise, adjust monitoring and maintenance schedules accordingly.
+
+In conclusion, focusing on enhancing network conditions to align with those of cluster_1 will likely yield improvements in throughput and latency, leading to a better user experience.
+
+
+==================================================
+USER PROMPT:
+==================================================
+Based on this network performance data:
+
+{
+  "clients": {
+    "client01": {
+      "throughput_download": {
+        "value": 514.9956105263158,
+        "percentile_rank": 25.0
+      },
+      "throughput_upload": {
+        "value": 251.5844377190083,
+        "percentile_rank": 12.5
+      },
+      "rtt_download": {
+        "value": 10.326956140350878,
+        "percentile_rank": 93.75
+      },
+      "rtt_upload": {
+        "value": 12.81227971201589,
+        "percentile_rank": 100.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.8,
+        "percentile_rank": 78.125
+      },
+      "intervals": 15,
+      "avg_interval_length_days": 16,
+      "events": 3,
+      "cluster_1_odds_ratio": 2.1142127657961005,
+      "unique_servers": 3
+    },
+    "client02": {
+      "throughput_download": {
+        "value": 584.8680356489439,
+        "percentile_rank": 62.5
+      },
+      "throughput_upload": {
+        "value": 299.53799208184563,
+        "percentile_rank": 18.75
+      },
+      "rtt_download": {
+        "value": 13.666108219909507,
+        "percentile_rank": 87.5
+      },
+      "rtt_upload": {
+        "value": 15.260758879224623,
+        "percentile_rank": 93.75
+      },
+      "cluster_1_ratio": {
+        "value": 0.14285714285714285,
+        "percentile_rank": 6.25
+      },
+      "intervals": 28,
+      "avg_interval_length_days": 14,
+      "events": 20,
+      "cluster_1_odds_ratio": 0.13561982608533366,
+      "unique_servers": 5
+    },
+    "client03": {
+      "throughput_download": {
+        "value": 600.935737359646,
+        "percentile_rank": 75.0
+      },
+      "throughput_upload": {
+        "value": 117.67305951529409,
+        "percentile_rank": 6.25
+      },
+      "rtt_download": {
+        "value": 50.1888271417467,
+        "percentile_rank": 6.25
+      },
+      "rtt_upload": {
+        "value": 123.2860711520549,
+        "percentile_rank": 6.25
+      },
+      "cluster_1_ratio": {
+        "value": 0.875,
+        "percentile_rank": 93.75
+      },
+      "intervals": 8,
+      "avg_interval_length_days": 48,
+      "events": 2,
+      "cluster_1_odds_ratio": 1.8533960394358642,
+      "unique_servers": 5
+    },
+    "client04": {
+      "throughput_download": {
+        "value": 740.8711538461538,
+        "percentile_rank": 93.75
+      },
+      "throughput_upload": {
+        "value": 441.75339730769235,
+        "percentile_rank": 25.0
+      },
+      "rtt_download": {
+        "value": 9.475730769230768,
+        "percentile_rank": 100.0
+      },
+      "rtt_upload": {
+        "value": 15.69528846153846,
+        "percentile_rank": 87.5
+      },
+      "cluster_1_ratio": {
+        "value": 0.7692307692307693,
+        "percentile_rank": 68.75
+      },
+      "intervals": 13,
+      "avg_interval_length_days": 18,
+      "events": 5,
+      "cluster_1_odds_ratio": 1.260291835508293,
+      "unique_servers": 4
+    },
+    "client05": {
+      "throughput_download": {
+        "value": 534.6149958594034,
+        "percentile_rank": 31.25
+      },
+      "throughput_upload": {
+        "value": 751.8175416017659,
+        "percentile_rank": 93.75
+      },
+      "rtt_download": {
+        "value": 28.02112580170831,
+        "percentile_rank": 75.0
+      },
+      "rtt_upload": {
+        "value": 26.38580736937343,
+        "percentile_rank": 75.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.8421052631578947,
+        "percentile_rank": 87.5
+      },
+      "intervals": 19,
+      "avg_interval_length_days": 17,
+      "events": 1,
+      "cluster_1_odds_ratio": 3.776905563934782,
+      "unique_servers": 5
+    },
+    "client06": {
+      "throughput_download": {
+        "value": 541.4308390201683,
+        "percentile_rank": 37.5
+      },
+      "throughput_upload": {
+        "value": 730.6074023632233,
+        "percentile_rank": 87.5
+      },
+      "rtt_download": {
+        "value": 31.348044757544884,
+        "percentile_rank": 68.75
+      },
+      "rtt_upload": {
+        "value": 32.67139583143692,
+        "percentile_rank": 68.75
+      },
+      "cluster_1_ratio": {
+        "value": 0.42105263157894735,
+        "percentile_rank": 21.875
+      },
+      "intervals": 19,
+      "avg_interval_length_days": 18,
+      "events": 3,
+      "cluster_1_odds_ratio": 0.36660939976349916,
+      "unique_servers": 5
+    },
+    "client07": {
+      "throughput_download": {
+        "value": 656.7624882155227,
+        "percentile_rank": 87.5
+      },
+      "throughput_upload": {
+        "value": 657.7482778000698,
+        "percentile_rank": 56.25
+      },
+      "rtt_download": {
+        "value": 35.0679710402141,
+        "percentile_rank": 56.25
+      },
+      "rtt_upload": {
+        "value": 34.659144979096354,
+        "percentile_rank": 56.25
+      },
+      "cluster_1_ratio": {
+        "value": 0.3333333333333333,
+        "percentile_rank": 12.5
+      },
+      "intervals": 27,
+      "avg_interval_length_days": 14,
+      "events": 15,
+      "cluster_1_odds_ratio": 0.21481877281625905,
+      "unique_servers": 5
+    },
+    "client08": {
+      "throughput_download": {
+        "value": 558.9439202382677,
+        "percentile_rank": 50.0
+      },
+      "throughput_upload": {
+        "value": 704.8424209270216,
+        "percentile_rank": 81.25
+      },
+      "rtt_download": {
+        "value": 45.92064951527274,
+        "percentile_rank": 12.5
+      },
+      "rtt_upload": {
+        "value": 39.300208544929085,
+        "percentile_rank": 43.75
+      },
+      "cluster_1_ratio": {
+        "value": 0.7222222222222222,
+        "percentile_rank": 56.25
+      },
+      "intervals": 18,
+      "avg_interval_length_days": 22,
+      "events": 5,
+      "cluster_1_odds_ratio": 1.3615851256298561,
+      "unique_servers": 5
+    },
+    "client09": {
+      "throughput_download": {
+        "value": 572.1653778625,
+        "percentile_rank": 56.25
+      },
+      "throughput_upload": {
+        "value": 682.5544697757937,
+        "percentile_rank": 68.75
+      },
+      "rtt_download": {
+        "value": 45.20532734375001,
+        "percentile_rank": 31.25
+      },
+      "rtt_upload": {
+        "value": 45.05184170314522,
+        "percentile_rank": 25.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.5416666666666666,
+        "percentile_rank": 31.25
+      },
+      "intervals": 24,
+      "avg_interval_length_days": 16,
+      "events": 11,
+      "cluster_1_odds_ratio": 1.004553117396544,
+      "unique_servers": 5
+    },
+    "client10": {
+      "throughput_download": {
+        "value": 744.9754569622395,
+        "percentile_rank": 100.0
+      },
+      "throughput_upload": {
+        "value": 630.746552788104,
+        "percentile_rank": 43.75
+      },
+      "rtt_download": {
+        "value": 33.88267555832927,
+        "percentile_rank": 62.5
+      },
+      "rtt_upload": {
+        "value": 33.43636385188628,
+        "percentile_rank": 62.5
+      },
+      "cluster_1_ratio": {
+        "value": 0.6666666666666666,
+        "percentile_rank": 50.0
+      },
+      "intervals": 6,
+      "avg_interval_length_days": 14,
+      "events": 1,
+      "cluster_1_odds_ratio": 1.0487056299494686,
+      "unique_servers": 3
+    },
+    "client11": {
+      "throughput_download": {
+        "value": 645.2320856731606,
+        "percentile_rank": 81.25
+      },
+      "throughput_upload": {
+        "value": 670.5799336521738,
+        "percentile_rank": 62.5
+      },
+      "rtt_download": {
+        "value": 39.94597104192747,
+        "percentile_rank": 43.75
+      },
+      "rtt_upload": {
+        "value": 40.18054122073579,
+        "percentile_rank": 37.5
+      },
+      "cluster_1_ratio": {
+        "value": 0.8,
+        "percentile_rank": 78.125
+      },
+      "intervals": 5,
+      "avg_interval_length_days": 16,
+      "events": 1,
+      "cluster_1_odds_ratio": 2.1904530918897858,
+      "unique_servers": 3
+    },
+    "client12": {
+      "throughput_download": {
+        "value": 543.5673644325806,
+        "percentile_rank": 43.75
+      },
+      "throughput_upload": {
+        "value": 623.6184792248301,
+        "percentile_rank": 37.5
+      },
+      "rtt_download": {
+        "value": 38.0138325,
+        "percentile_rank": 50.0
+      },
+      "rtt_upload": {
+        "value": 35.77940386559139,
+        "percentile_rank": 50.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.65,
+        "percentile_rank": 43.75
+      },
+      "intervals": 20,
+      "avg_interval_length_days": 18,
+      "events": 7,
+      "cluster_1_odds_ratio": 1.0930945209534038,
+      "unique_servers": 5
+    },
+    "client13": {
+      "throughput_download": {
+        "value": 389.09494579801196,
+        "percentile_rank": 6.25
+      },
+      "throughput_upload": {
+        "value": 655.658844751828,
+        "percentile_rank": 50.0
+      },
+      "rtt_download": {
+        "value": 45.35643959540386,
+        "percentile_rank": 25.0
+      },
+      "rtt_upload": {
+        "value": 45.78550904920067,
+        "percentile_rank": 12.5
+      },
+      "cluster_1_ratio": {
+        "value": 0.42105263157894735,
+        "percentile_rank": 21.875
+      },
+      "intervals": 19,
+      "avg_interval_length_days": 19,
+      "events": 9,
+      "cluster_1_odds_ratio": 0.39183325064599295,
+      "unique_servers": 5
+    },
+    "client14": {
+      "throughput_download": {
+        "value": 458.45252074436877,
+        "percentile_rank": 12.5
+      },
+      "throughput_upload": {
+        "value": 692.8402345857555,
+        "percentile_rank": 75.0
+      },
+      "rtt_download": {
+        "value": 41.905840000000005,
+        "percentile_rank": 37.5
+      },
+      "rtt_upload": {
+        "value": 40.72869805296856,
+        "percentile_rank": 31.25
+      },
+      "cluster_1_ratio": {
+        "value": 0.7333333333333333,
+        "percentile_rank": 62.5
+      },
+      "intervals": 15,
+      "avg_interval_length_days": 23,
+      "events": 3,
+      "cluster_1_odds_ratio": 2.0935667568787295,
+      "unique_servers": 5
+    },
+    "client15": {
+      "throughput_download": {
+        "value": 597.9819838827839,
+        "percentile_rank": 68.75
+      },
+      "throughput_upload": {
+        "value": 762.1237847802198,
+        "percentile_rank": 100.0
+      },
+      "rtt_download": {
+        "value": 18.65734668040293,
+        "percentile_rank": 81.25
+      },
+      "rtt_upload": {
+        "value": 15.801916895604396,
+        "percentile_rank": 81.25
+      },
+      "cluster_1_ratio": {
+        "value": 1.0,
+        "percentile_rank": 100.0
+      },
+      "intervals": 2,
+      "avg_interval_length_days": 23,
+      "events": 0,
+      "cluster_1_odds_ratio": 1.720534234419535,
+      "unique_servers": 2
+    },
+    "client16": {
+      "throughput_download": {
+        "value": 496.342068738205,
+        "percentile_rank": 18.75
+      },
+      "throughput_upload": {
+        "value": 619.5550937675104,
+        "percentile_rank": 31.25
+      },
+      "rtt_download": {
+        "value": 45.67903744788238,
+        "percentile_rank": 18.75
+      },
+      "rtt_upload": {
+        "value": 45.572251362209066,
+        "percentile_rank": 18.75
+      },
+      "cluster_1_ratio": {
+        "value": 0.631578947368421,
+        "percentile_rank": 37.5
+      },
+      "intervals": 19,
+      "avg_interval_length_days": 18,
+      "events": 2,
+      "cluster_1_odds_ratio": 1.0355583530686223,
+      "unique_servers": 5
+    }
+  },
+  "overall_stats": {
+    "avg_throughput_download": 573.827161550517,
+    "median_throughput_download": 565.5546490503839,
+    "std_throughput_download": 93.53859483651978,
+    "avg_throughput_upload": 580.8276201651336,
+    "median_throughput_upload": 656.7035612759489,
+    "std_throughput_upload": 194.86544947311185,
+    "avg_rtt_download": 33.29136772210461,
+    "median_rtt_download": 36.54090177010705,
+    "std_rtt_download": 13.554070146156443,
+    "avg_rtt_upload": 37.65046755818819,
+    "median_rtt_upload": 35.21927442234387,
+    "std_rtt_upload": 25.554234993937847
+  },
+  "total_clients": 16
+}
+
+Which clients are performing poorly?
+
+Answer in clear language, suitable for network operators.
+If you have already analyzed the clusters, keep in mind which cluster represents better performance.
+Always compare the metrics with the time between changes, the interval length, and the Odds Ratio related to Cluster 1.
+
+
+==================================================
+LLM RESPONSE:
+==================================================
+Based on the provided data, several clients are identified as underperforming. The analysis focuses on throughput, RTT (Round Trip Time), cluster membership ratios, odds ratios, and other relevant metrics to determine which clients need attention.
+
+### Poorly Performing Clients:
+
+1. **Client03**:
+   - **Throughput Download**: 600.94 Mbps (75th percentile) – Slightly above average but not exceptional.
+   - **Throughput Upload**: 117.67 Mbps (6.25th percentile) – Significantly below average, indicating poor upload performance.
+   - **RTT Download**: 50.19 ms (6.25th percentile) – Very high latency for download RTT.
+   - **RTT Upload**: 123.29 ms (6.25th percentile) – Extremely high latency for upload RTT, which is a major concern.
+   - **Cluster_1 Ratio**: 0.875 (93.75th percentile) – High ratio but poor performance metrics suggest issues despite cluster membership.
+   - **Events**: 2 events over 8 intervals with an average interval length of 48 days.
+
+**Recommendation**: Investigate why upload speeds and RTTs are significantly lower than expected, even though the client is heavily associated with Cluster_1. Potential issues could include hardware limitations, network configuration problems, or server-side bottlenecks.
+
+---
+
+2. **Client06**:
+   - **Throughput Download**: 541.43 Mbps (37.5th percentile) – Below average download speed.
+   - **Throughput Upload**: 730.61 Mbps (87.5th percentile) – High upload speed, but overall performance is inconsistent.
+   - **RTT Download**: 31.35 ms (68.75th percentile) – Slightly above average latency for download RTT.
+   - **RTT Upload**: 32.67 ms (68.75th percentile) – Slightly above average latency for upload RTT.
+   - **Cluster_1 Ratio**: 0.421 (21.875th percentile) – Low ratio, suggesting less association with Cluster_1.
+   - **Events**: 3 events over 19 intervals with an average interval length of 18 days.
+
+**Recommendation**: Focus on improving download speeds and reducing RTTs. The low cluster membership ratio indicates that this client may not benefit from the same network conditions as those in Cluster_1. Consider reconfiguring or upgrading hardware to align with Cluster_1's environment for better performance.
+
+---
+
+3. **Client07**:
+   - **Throughput Download**: 656.76 Mbps (87.5th percentile) – High download speed, but upload performance is inconsistent.
+   - **Throughput Upload**: 657.75 Mbps (56.25th percentile) – Below average upload speed.
+   - **RTT Download**: 35.07 ms (56.25th percentile) – Slightly above average latency for download RTT.
+   - **RTT Upload**: 34.66 ms (56.25th percentile) – Slightly above average latency for upload RTT.
+   - **Cluster_1 Ratio**: 0.333 (12.5th percentile) – Very low ratio, suggesting minimal association with Cluster_1.
+   - **Events**: 15 events over 27 intervals with an average interval length of 14 days.
+
+**Recommendation**: Despite high download speeds, the client's upload performance and cluster membership are suboptimal. Investigate whether this client can be migrated to a configuration that aligns more closely with Cluster_1 to improve overall performance.
+
+---
+
+### General Observations:
+- **Cluster Membership**: Clients with higher cluster_1 ratios (e.g., Client03) should still exhibit better performance metrics, but some clients like Client03 and Client06 show inconsistencies. This suggests that while cluster membership is a useful indicator, it does not guarantee superior performance without addressing underlying issues.
+- **RTT and Throughput**: Clients with high RTTs and inconsistent throughput (e.g., Client03, Client06) are likely experiencing network or hardware limitations. These should be prioritized for troubleshooting.
+- **Events and Intervals**: Clients with fewer events and longer intervals may have less frequent monitoring data, making it harder to assess their performance accurately.
+
+### Conclusion:
+Clients 03, 06, and 07 require immediate attention due to poor upload speeds, high RTTs, and inconsistent cluster membership. Network administrators should prioritize these clients for troubleshooting, focusing on improving throughput and reducing latency while ensuring alignment with Cluster_1's optimal network conditions.
+
+
+==================================================
+USER PROMPT:
+==================================================
+Based on this network performance data:
+
+{
+  "servers": {
+    "gru03": {
+      "throughput_download": {
+        "value": 274.790702459336,
+        "percentile_rank": 20.0
+      },
+      "throughput_upload": {
+        "value": 366.02360437059485,
+        "percentile_rank": 20.0
+      },
+      "rtt_download": {
+        "value": 89.28310959919237,
+        "percentile_rank": 20.0
+      },
+      "rtt_upload": {
+        "value": 91.80421523389396,
+        "percentile_rank": 20.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.3114754098360656,
+        "percentile_rank": 20.0
+      },
+      "intervals": 61,
+      "avg_interval_length_days": 17,
+      "events": 26,
+      "cluster_1_odds_ratio": 0.6572272830501508,
+      "unique_clients": 15
+    },
+    "gru05": {
+      "throughput_download": {
+        "value": 731.770856572237,
+        "percentile_rank": 100.0
+      },
+      "throughput_upload": {
+        "value": 749.7119175410129,
+        "percentile_rank": 100.0
+      },
+      "rtt_download": {
+        "value": 16.511620725237417,
+        "percentile_rank": 80.0
+      },
+      "rtt_upload": {
+        "value": 16.754323264614865,
+        "percentile_rank": 60.0
+      },
+      "cluster_1_ratio": {
+        "value": 1.0,
+        "percentile_rank": 90.0
+      },
+      "intervals": 28,
+      "avg_interval_length_days": 26,
+      "events": 0,
+      "cluster_1_odds_ratio": 4.51324138523911,
+      "unique_clients": 11
+    },
+    "gru06": {
+      "throughput_download": {
+        "value": 665.8033906859446,
+        "percentile_rank": 80.0
+      },
+      "throughput_upload": {
+        "value": 748.176720004669,
+        "percentile_rank": 80.0
+      },
+      "rtt_download": {
+        "value": 17.470135639150428,
+        "percentile_rank": 40.0
+      },
+      "rtt_upload": {
+        "value": 16.1294929334716,
+        "percentile_rank": 80.0
+      },
+      "cluster_1_ratio": {
+        "value": 1.0,
+        "percentile_rank": 90.0
+      },
+      "intervals": 34,
+      "avg_interval_length_days": 26,
+      "events": 0,
+      "cluster_1_odds_ratio": 6.668607913649793,
+      "unique_clients": 12
+    },
+    "rnp_rj": {
+      "throughput_download": {
+        "value": 608.8230902880151,
+        "percentile_rank": 40.0
+      },
+      "throughput_upload": {
+        "value": 586.4681772358713,
+        "percentile_rank": 40.0
+      },
+      "rtt_download": {
+        "value": 17.40592723404726,
+        "percentile_rank": 60.0
+      },
+      "rtt_upload": {
+        "value": 21.92223622380471,
+        "percentile_rank": 40.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.4342105263157895,
+        "percentile_rank": 40.0
+      },
+      "intervals": 76,
+      "avg_interval_length_days": 14,
+      "events": 38,
+      "cluster_1_odds_ratio": 0.1717419987487206,
+      "unique_clients": 16
+    },
+    "rnp_sp": {
+      "throughput_download": {
+        "value": 651.9689011572207,
+        "percentile_rank": 60.0
+      },
+      "throughput_upload": {
+        "value": 625.2665216258958,
+        "percentile_rank": 60.0
+      },
+      "rtt_download": {
+        "value": 13.483590758620213,
+        "percentile_rank": 100.0
+      },
+      "rtt_upload": {
+        "value": 14.967488257854844,
+        "percentile_rank": 100.0
+      },
+      "cluster_1_ratio": {
+        "value": 0.5517241379310345,
+        "percentile_rank": 60.0
+      },
+      "intervals": 58,
+      "avg_interval_length_days": 18,
+      "events": 24,
+      "cluster_1_odds_ratio": 0.29437187381393587,
+      "unique_clients": 16
+    }
+  },
+  "overall_stats": {
+    "avg_throughput_download": 586.6313882325506,
+    "median_throughput_download": 651.9689011572207,
+    "std_throughput_download": 179.81917777396254,
+    "avg_throughput_upload": 615.1293881556088,
+    "median_throughput_upload": 625.2665216258958,
+    "std_throughput_upload": 157.15594781096684,
+    "avg_rtt_download": 30.83087679124954,
+    "median_rtt_download": 17.40592723404726,
+    "std_rtt_download": 32.71609551108846,
+    "avg_rtt_upload": 32.315551182727994,
+    "median_rtt_upload": 16.754323264614865,
+    "std_rtt_upload": 33.36172106487092
+  },
+  "total_servers": 5
+}
+
+Which servers may be having connection issues?
+
+Answer in clear language, suitable for network operators.
+If you have already analyzed the clusters, keep in mind which cluster represents better performance.
+Always compare the metrics with the time between changes, the interval length, and the Odds Ratio related to Cluster 1.
+
+
+==================================================
+LLM RESPONSE:
+==================================================
+**Answer:**
+
+Based on the provided network performance data, **gru03** is identified as the server most likely experiencing connection issues. This conclusion is drawn from its significantly below-average throughput and high RTT values compared to the overall averages. The other servers, such as gru05, gru06, rnp_rj, and rnp_sp, generally perform well, with gru05 and gru06 standing out as top performers aligned with Cluster 1's optimal conditions. While rnp_rj and rnp_sp have some room for improvement, they do not exhibit severe performance issues like gru03.
+
+**Recommendation:**
+- **gru03**: Prioritize troubleshooting to address poor throughput and high RTT values. Investigate potential network configuration issues or hardware limitations that may be contributing to these performance metrics.
+- **Other Servers (gru05, gru06, rnp_rj, rnp_sp)**: Continue monitoring their performance as they generally align well with Cluster 1's optimal conditions. Consider minor optimizations to further enhance their alignment and overall network efficiency.
+
+By focusing on these actions, network administrators can ensure improved connection quality and stability across the network.

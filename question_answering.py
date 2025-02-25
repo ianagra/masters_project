@@ -1,5 +1,6 @@
 from langchain_core.tools import tool, StructuredTool
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 import pandas as pd
@@ -8,6 +9,11 @@ import json
 from typing import Dict
 import re
 import datetime
+from dotenv import load_dotenv
+import os
+
+# Carrega as variáveis do arquivo .env
+load_dotenv()
 
 class NetworkTools:
     def __init__(self):
@@ -430,7 +436,7 @@ class NetworkTools:
         connection_data['timestamp'] = pd.to_datetime(connection_data['timestamp_start'])
         
         analysis = {
-            'general_info': {
+            'pair_info': {
                 'total_intervals': len(connection_data),
                 'cluster_distribution': {
                     'cluster_0': float((connection_data['cluster'] == 0).mean()),
@@ -464,14 +470,50 @@ class NetworkTools:
                     'mean': float(connection_data['rtt_upload'].mean()),
                     'std': float(connection_data['rtt_upload_std'].mean())
                 }
-            },
-            'cluster_analysis': {}
+            }
         }
         
+        # Processamento dos pontos de mudança
+        # Filtrar apenas os dados do servidor e ordenar
+        df_pair = connection_data.sort_values(by=['timestamp_start']).copy()
+
+        # Identificar os pontos de mudança
+        pontos_mudanca = df_pair[df_pair['event'] == 1].copy()
+        change_points = []
+
+        # Calcular as diferenças de métricas para cada ponto de mudança
+        for idx, mudanca in pontos_mudanca.iterrows():
+            # Encontrar o próximo intervalo para o mesmo par cliente-servidor
+            proximo_intervalo = df_pair[
+                (df_pair['client'] == mudanca['client']) & (df_pair['site'] == mudanca['site']) & (pd.to_datetime(df_pair['timestamp_start']) > pd.to_datetime(mudanca['timestamp_end']))
+            ].sort_values('timestamp_start').head(1)
+
+            # Se não houver próximo intervalo, pular o ponto de mudança
+            if proximo_intervalo.empty:
+                continue
+
+            proximo = proximo_intervalo.iloc[0]
+
+            # Calcular as diferenças de métricas
+            resultado = {
+                'timestamp': str(mudanca['timestamp_end']),
+                'client': mudanca['client'],
+                'interval_length': float(mudanca['time']),
+                'cluster_before_changepoint': int(mudanca['cluster']),
+                'cluster_after_changepoint': int(proximo['cluster']),
+                'throughput_download_difference': float(proximo['throughput_download'] - mudanca['throughput_download']),
+                'rtt_download_difference': float(proximo['rtt_download'] - mudanca['rtt_download'])
+            }
+
+            change_points.append(resultado)
+
+        # Adicionar os pontos de mudança ao resultado
+        analysis['change_points'] = change_points
+
         return analysis
 
 class NetworkAgent:
-    def __init__(self, llama_base_url: str = 'http://10.246.47.169:10000', phi_base_url: str = 'http://10.246.47.169:10000'):
+    def __init__(self, selector_base_url: str = 'http://10.246.47.169:10000', analyst_base_url: str = 'http://10.246.47.169:10000'):
         self.tools = NetworkTools()
         self.logger = ConversationLogger()
         
@@ -524,14 +566,21 @@ class NetworkAgent:
         # Initialize models
         self.tool_selector_model = ChatOllama(
             model="llama3.2",
-            base_url=llama_base_url,
+            base_url=selector_base_url,
             temperature=0,
         )
         
         self.analysis_model = ChatOllama(
-            model="phi4",
-            base_url=phi_base_url,
+            model="deepseek-r1:14b",
+            base_url=analyst_base_url,
             temperature=0,
+            num_ctx=8192
+        )
+
+        self.evaluator_model = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0,
+            api_key=os.getenv("OPENAI_API_KEY")
         )
         
         self.tool_selector_prompt = ChatPromptTemplate.from_messages([
@@ -544,12 +593,34 @@ class NetworkAgent:
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}")
         ])
+
+        self.evaluator_prompt = ChatPromptTemplate.from_messages([
+            ("system", self._get_evaluator_context()),
+            ("human", "Prompt sent to analyst:\n{analysis_prompt}\n\nAnalyst's response:\n{analysis_response}\n\nPlease evaluate this response.")
+        ])
         
         self.chat_history = []
         
         # Log the system contexts
         self.logger.log_system_prompt("LLAMA 3.2 - Tool Selection", self._get_tool_selection_context())
-        self.logger.log_system_prompt("PHI 4 - Analysis", self._get_analysis_context())
+        self.logger.log_system_prompt("DeepSeek-R1-14B - Analysis", self._get_analysis_context())
+        self.logger.log_system_prompt("GPT-4o - Evaluation", self._get_evaluator_context())
+
+    def _extract_analysis_content(self, response: str) -> str:
+        """
+        Extrai apenas a parte da análise após a tag </think>.
+        Se a tag não for encontrada, retorna a resposta completa.
+        """
+        try:
+            # Procura pela tag </think>
+            if '</think>' in response:
+                # Divide a string na tag e pega tudo que vem depois
+                analysis = response.split('</think>')[-1].strip()
+                return analysis
+            return response.strip()
+        except Exception as e:
+            print(f"Error extracting analysis content: {e}")
+            return response
 
     def _get_tool_selection_context(self) -> str:
         return """You are a computer networks specialist.
@@ -603,7 +674,7 @@ Select the most appropriate tool based on the user's question. Do not include an
 
 The data was processed as follows:
 
-1. Change points were detected in download throughput time series for each client-server pair.
+1. Change points were detected in RTT time series for each client-server pair.
 2. Intervals between changes were analyzed using survival analysis.
 3. Intervals were clustered into 2 groups based on:
 - Interval duration, in days;
@@ -631,6 +702,36 @@ When comparing clusters:
 - Indicate which represents better performance
 
 Respond in clear language suitable for network operators."""
+
+    def _get_evaluator_context(self) -> str:
+        return """You are an evaluator assessing the quality and accuracy of network performance analysis responses.
+
+Your task is to evaluate responses based on:
+1. Technical Accuracy
+   - Are the interpretations of metrics correct?
+   - Are the conclusions supported by the data?
+   - Are there any technical errors or misunderstandings?
+
+2. Completeness
+   - Does the response address all aspects of the question?
+   - Are important metrics or patterns discussed?
+   - Is sufficient context provided?
+
+3. Actionability
+   - Are the insights practical and useful?
+   - Are recommendations specific and implementable?
+   - Is the importance of findings clearly explained?
+
+4. Clarity
+   - Is the response clear and well-structured?
+   - Is technical language used appropriately?
+   - Would network operators understand the response?
+
+Provide a concise evaluation highlighting strengths and any areas for improvement.
+Focus on substantial issues rather than minor details.
+If you identify errors, explain why they are incorrect and what the correct interpretation should be.
+Always answer in Portuguese.
+"""
 
     def _extract_tool_call(self, response: str) -> tuple:
         """
@@ -691,7 +792,7 @@ Respond in clear language suitable for network operators."""
             if not data:
                 return "There was an error analyzing the data. Please try again."
             
-            # 4. Prepare and log analysis using PHI 4
+            # 4. Prepare and log analysis using analyst model
             analysis_prompt = f"""Based on this network performance data:
 
 {json.dumps(data, indent=2)}
@@ -703,7 +804,7 @@ If you have already analyzed the clusters, keep in mind which cluster represents
 Always compare the metrics with the time between changes, the interval length, and the Odds Ratio related to Cluster 1.
 """
             
-            self.logger.log_llm_prompt("PHI 4 - Analysis", analysis_prompt)
+            self.logger.log_llm_prompt("DeepSeek-R1-14B - Analysis", analysis_prompt)
             
             response = self.analysis_prompt.invoke({
                 "input": analysis_prompt,
@@ -711,15 +812,33 @@ Always compare the metrics with the time between changes, the interval length, a
             }).to_messages()
             
             analysis = self.analysis_model.invoke(response)
-            self.logger.log_llm_response("PHI 4 - Analysis", analysis.content)
+            self.logger.log_llm_response("DeepSeek-R1-14B - Analysis", analysis.content)
             
-            # 5. Update history
+             # Extrair apenas a parte da análise após </think>
+            clean_analysis = self._extract_analysis_content(analysis.content)
+            
+
+            # 5. Get evaluation from GPT-4
+            evaluation_response = self.evaluator_prompt.invoke({
+                "analysis_prompt": analysis_prompt,
+                "analysis_response": clean_analysis
+            }).to_messages()
+            
+            evaluation = self.evaluator_model.invoke(evaluation_response)
+            self.logger.log_llm_response("GPT-4o - Evaluation", evaluation.content)
+
+            # 6. Update history
             self.chat_history.extend([
                 HumanMessage(content=analysis_prompt),
                 AIMessage(content=analysis.content)
             ])
             
-            return analysis.content
+            # Return both analysis and evaluation
+            return f"""Analysis:
+{analysis.content}
+
+Evaluation:
+{evaluation.content}"""
             
         except Exception as e:
             return f"An error occurred: {str(e)}"
@@ -727,7 +846,7 @@ Always compare the metrics with the time between changes, the interval length, a
 class ConversationLogger:
     def __init__(self, filename_prefix="qa_log"):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.filename = f"chat_logs/{filename_prefix}_llama32_phi4_{timestamp}.txt"
+        self.filename = f"chat_logs/{filename_prefix}_llama32_deepseek-r1-14b_rtt_u_{timestamp}.txt"
         # Clear previous log file
         with open(self.filename, 'w', encoding='utf-8') as f:
             f.write("New Conversation Log\n")
