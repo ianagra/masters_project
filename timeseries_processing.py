@@ -274,7 +274,7 @@ def detect_changepoints(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, agg
     print(f"Changepoints, contagem de votos e estatísticas locais detectados e salvos em: {output_dir}")
 
 
-def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, nu):
+def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=False):
     """
     Detecta pontos de mudança em séries temporais multivariadas.
     
@@ -295,16 +295,18 @@ def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, 
             df = pd.read_parquet(os.path.join(input_dir, file))
             
             # Selecionar colunas numéricas
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            numeric_cols_all = df.select_dtypes(include=[np.number]).columns
+            numeric_cols = ['throughput_download', 'rtt_upload']
             
             # Preparar dados multivariados
             X = df[numeric_cols].values
+            X_all = df[numeric_cols_all].values
             
             # Executar VWCD multivariado
             kargs = {
-                'X': X, 'w': wv, 'w0': wv, 'ab': ab,
+                'X': X, 'X_all': X_all, 'w': wv, 'w0': wv, 'ab': ab,
                 'p_thr': p_thr, 'vote_p_thr': vote_p_thr,
-                'vote_n_thr': vote_n_thr, 'y0': y0, 'yw': yw, 'aggreg': aggreg, 'nu': nu
+                'vote_n_thr': vote_n_thr, 'y0': y0, 'yw': yw, 'aggreg': aggreg, 'verbose': verbose
             }
             
             CP, M0, S0, _, vote_counts, vote_probs, agg_probs = vwcd_mv(**kargs)
@@ -320,8 +322,8 @@ def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, 
             df['agg_probs'] = agg_probs
             
             # Inicializar arrays para médias e desvios padrão locais
-            local_means = np.zeros((len(df), len(numeric_cols)))
-            local_stds = np.zeros((len(df), len(numeric_cols)))
+            local_means = np.zeros((len(df), len(numeric_cols_all)))
+            local_stds = np.zeros((len(df), len(numeric_cols_all)))
             
             # Preencher médias e desvios padrão locais (na escala original)
             if len(CP) > 0:
@@ -339,11 +341,11 @@ def detect_changepoints_mv(data, wv, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, 
                 local_stds[CP[-1]:] = np.sqrt(np.diag(S0[-1]))
             else:
                 # Se não houver CPs, usar a média e desvio padrão de toda a série
-                local_means[:] = X.mean(axis=0)
-                local_stds[:] = X.std(axis=0, ddof=1)
+                local_means[:] = X_all.mean(axis=0)
+                local_stds[:] = X_all.std(axis=0, ddof=1)
             
             # Adicionar colunas de estatísticas locais para cada variável
-            for i, col in enumerate(numeric_cols):
+            for i, col in enumerate(numeric_cols_all):
                 # Médias locais
                 means_column = f'{col}_local_mean'
                 df[means_column] = local_means[:, i]
@@ -453,7 +455,7 @@ def create_survival_dataset(data, feature, max_gap_days=3, multivariate=False):
 
                     throughput_upload_local_mean = initial_values.get('throughput_upload_local_mean', np.nan)
                     if pd.isna(throughput_upload_local_mean):
-                        throughput_upload_local_mean = df['throughput_upload_local_mean'].iloc[startthroughput_u_idx:end_idx+1].dropna().values[0] if not df['throughput_upload_local_mean'].iloc[start_idx:end_idx+1].dropna().empty else np.nan
+                        throughput_upload_local_mean = df['throughput_upload_local_mean'].iloc[start_idx:end_idx+1].dropna().values[0] if not df['throughput_upload_local_mean'].iloc[start_idx:end_idx+1].dropna().empty else np.nan
 
                     rtt_download_local_mean = initial_values.get('rtt_download_local_mean', np.nan)
                     if pd.isna(rtt_download_local_mean):
@@ -469,7 +471,7 @@ def create_survival_dataset(data, feature, max_gap_days=3, multivariate=False):
 
                     throughput_upload_local_std = initial_values.get('throughput_upload_local_std', np.nan)
                     if pd.isna(throughput_upload_local_std):
-                        throughput_upload_local_std = df['throughput_upload_local_std'].iloc[startthroughput_u_idx:end_idx+1].dropna().values[0] if not df['throughput_upload_local_std'].iloc[start_idx:end_idx+1].dropna().empty else np.nan
+                        throughput_upload_local_std = df['throughput_upload_local_std'].iloc[start_idx:end_idx+1].dropna().values[0] if not df['throughput_upload_local_std'].iloc[start_idx:end_idx+1].dropna().empty else np.nan
 
                     rtt_download_local_std = initial_values.get('rtt_download_local_std', np.nan)
                     if pd.isna(rtt_download_local_std):

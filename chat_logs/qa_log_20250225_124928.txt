@@ -1,0 +1,11 @@
+New Conversation Log
+
+==================================================
+USER_PROMPT:
+==================================================
+Which cluster is the best and why?
+
+==================================================
+ERROR:
+==================================================
+An error occurred during processing: [Errno 111] Connection refused

@@ -41,7 +41,7 @@ class ConversationLogger:
         self.filename = f"chat_logs/{filename_prefix}_{timestamp}.txt"
         # Clear previous log file
         with open(self.filename, 'w', encoding='utf-8') as f:
-            f.write("New Conversation Log\n")
+            f.write("Complete Conversation Log\n")
         self.conversation = []
 
     def log_entry(self, entry_type: str, model: str, content: Any) -> bool:
@@ -67,9 +67,13 @@ class ConversationLogger:
             print(f"Error writing to log file: {str(e)}")
             return False
 
+    def log_system_prompt(self, model: str, system_prompt):
+        """Log a system prompt for a model"""
+        return self.log_entry(f"SYSTEM PROMPT", model, system_prompt)
+    
     def log_user_prompt(self, prompt):
         """Log the user prompt"""
-        return self.log_entry("USER_PROMPT", "", prompt)
+        return self.log_entry("USER PROMPT", "", prompt)
 
     def log_tool_call(self, tool_name, parameters, result):
         """Log a tool call and its result"""
@@ -78,11 +82,15 @@ class ConversationLogger:
             "parameters": parameters,
             "result": result
         }
-        return self.log_entry("TOOL_CALL", "", content)
+        return self.log_entry("TOOL CALL", "", content)
 
     def log_response(self, model: str, response):
         """Log the model's response"""
-        return self.log_entry("RESPONSE", model, response)
+        return self.log_entry("LLM RESPONSE", model, response)
+        
+    def log_analyst_prompt(self, prompt):
+        """Log the prompt sent to the analyst model"""
+        return self.log_entry("LLM PROMPT", "DeepSeek-R1-14B - Analysis", prompt)
 
 try:
     surv = pd.read_csv('dataset_survival_rtt_u.csv')
@@ -659,7 +667,7 @@ def process_question(query: str, logger: ConversationLogger) -> str:
     tool_selector_model_with_tools = tool_selector_model.bind_tools(available_tools)
     
     # Create system messages
-    tool_selector_model_system = SystemMessage(content="""You are a computer networks specialist.
+    tool_selector_model_system_content = """You are a computer networks specialist.
 Your task is to select the most appropriate tool for analyzing network data based on the user's question.
 
 Available tools:
@@ -690,9 +698,14 @@ Available tools:
    - Use when analyzing overall performance of a specific client-server pair
    - Provides detailed metrics and cluster analysis for that connection
 
-Select the most appropriate tool based on the user's question.""")
+Select the most appropriate tool based on the user's question."""
     
-    analyst_model_system = SystemMessage(content="""You are a computer networks specialist analyzing network performance data collected from an ISP network.
+    tool_selector_model_system = SystemMessage(content=tool_selector_model_system_content)
+    
+    # Log the system prompt for the tool selector
+    logger.log_system_prompt("LLAMA 3.2 - Tool Selection", tool_selector_model_system_content)
+    
+    analyst_model_system_content = """You are a computer networks specialist analyzing network performance data collected from an ISP network.
 
 The data was processed as follows:
 
@@ -713,9 +726,14 @@ When comparing clusters:
 - Highlight the key differences between clusters
 - Indicate which represents better performance
 
-Respond in clear language suitable for network operators.""")
+Respond in clear language suitable for network operators."""
     
-    evaluator_model_system = SystemMessage(content="""You are an evaluator assessing the quality and accuracy of network performance analysis responses.
+    analyst_model_system = SystemMessage(content=analyst_model_system_content)
+    
+    # Log the system prompt for the analyst model
+    logger.log_system_prompt("DeepSeek-R1-14B - Analysis", analyst_model_system_content)
+    
+    evaluator_model_system_content = """You are an evaluator assessing the quality and accuracy of network performance analysis responses.
 Your task is to evaluate responses based on:
 
 1. Technical Accuracy
@@ -740,7 +758,13 @@ Your task is to evaluate responses based on:
 
 Provide a concise evaluation highlighting strengths and any areas for improvement.
 Focus on substantial issues rather than minor details.
-If you identify errors, explain why they are incorrect and what the correct interpretation should be.""")
+If you identify errors, explain why they are incorrect and what the correct interpretation should be."""
+    
+    evaluator_model_system = SystemMessage(content=evaluator_model_system_content)
+    
+    # Log the system prompt for the evaluator model
+    if evaluator_available:
+        logger.log_system_prompt("GPT-4o - Evaluation", evaluator_model_system_content)
     
     # Criar a mensagem do usuário
     user_message = HumanMessage(content=query)
@@ -750,7 +774,7 @@ If you identify errors, explain why they are incorrect and what the correct inte
     try:
         # Obter chamadas de função com o modelo seletor
         tool_calls_response = tool_selector_model_with_tools.invoke(tool_selector_model_messages)
-        logger.log_response("Llama 3.2", f"Tool selection response: {tool_calls_response.content}")
+        logger.log_response("LLAMA 3.2 - Tool Selection", tool_calls_response.content)
         
         # Extrair a chamada de função
         tool_calls = tool_calls_response.tool_calls
@@ -769,7 +793,7 @@ If you identify errors, explain why they are incorrect and what the correct inte
             # Executar a função de forma segura
             if tool_name in tool_map:
                 try:
-                    result = tool_map[tool_name](**tool_args)
+                    result = tool_map[tool_name].invoke(tool_args)
                     tool_results.append(AIMessage(content=json.dumps(result, indent=2)))
                     logger.log_tool_call(tool_name, tool_args, result)
                 except Exception as e:
@@ -782,9 +806,9 @@ If you identify errors, explain why they are incorrect and what the correct inte
                 logger.log_tool_call(tool_name, tool_args, {"error": error_msg})
 
         # Criar prompt para o modelo analista com os resultados das ferramentas
-        analyst_model_prompt = f"""
-        
-Based on the provided network performance data, answer this question:
+        analyst_model_prompt = f"""Based on this network performance data:
+
+{tool_results[0].content}
 
 {query}
 
@@ -792,6 +816,9 @@ Answer in clear language, suitable for network operators.
 If you have already analyzed the clusters, keep in mind which cluster represents better performance.
 Always compare the metrics with the time between changes, the interval length, and the Odds Ratio related to Cluster 1.
 """
+        
+        # Log the prompt sent to the analyst model
+        logger.log_analyst_prompt(analyst_model_prompt)
         
         # Análise com o modelo analista
         analyst_model_messages = [
@@ -802,26 +829,36 @@ Always compare the metrics with the time between changes, the interval length, a
         
         # Obter a análise final
         analyst_model_response = analyst_model.invoke(analyst_model_messages)
-        logger.log_response("DeepSeek-R1-14B", analyst_model_response.content)
+        logger.log_response("DeepSeek-R1-14B - Analysis", analyst_model_response.content)
         
         # Extrair apenas a parte da resposta após </think>
         clean_analysis = _extract_analysis_content(analyst_model_response.content)
         
         # Avaliação com o modelo avaliador
         if evaluator_available:
-            # Criar mensagens de avaliação
-            evaluator_model_messages = [
-                evaluator_model_system,
-                HumanMessage(content=f"""Prompt sent to analyst:
-{analyst_model_messages}
+            # Prepare the tool results for evaluation
+            tool_data_summary = ""
+            for i, tool_result in enumerate(tool_results):
+                if hasattr(tool_result, 'content') and tool_result.content:
+                    # Truncate long content for readability
+                    content_preview = tool_result.content[:1000] + "... [truncated]" if len(tool_result.content) > 1000 else tool_result.content
+                    tool_data_summary += f"Tool result {i+1}:\n{content_preview}\n\n"
+    
+            # Create evaluation messages
+            evaluator_prompt = f"""Prompt sent to analyst model:
+{analyst_model_prompt}
 
-Data provided to analyst:
-{json.dumps(result, indent=2)}
+Data provided to analyst model:
+{tool_data_summary}
 
-Analyst's response:
+Analyst model's response:
 {clean_analysis}
 
-Please evaluate this response.""")
+Please evaluate this response."""
+
+            evaluator_model_messages = [
+                evaluator_model_system,
+                HumanMessage(content=evaluator_prompt)
             ]
             
             # Obter avaliação da análise
@@ -833,11 +870,6 @@ Please evaluate this response.""")
         else:
             # Return just the analysis if evaluator is not available
             return clean_analysis
-        
-    except Exception as e:
-        error_message = f"An error occurred during processing: {str(e)}"
-        logger.log_entry("ERROR", "", error_message)
-        return error_message
         
     except Exception as e:
         error_message = f"An error occurred during processing: {str(e)}"

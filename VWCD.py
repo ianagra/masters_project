@@ -257,14 +257,16 @@ def loglik_mv(X, mean, cov):
         return -np.inf
 
 
-def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=False):
+def vwcd_mv(X, X_all, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose=False):
     """
     Detecta pontos de mudança em série temporal multivariada usando VWCD.
     
     Parâmetros:
     ----------
     X : array-like
-        Série temporal multivariada no formato (N x d)
+        Série temporal multivariada no formato (N x d) - usada para detecção de changepoints
+    X_all : array-like
+        Todas as séries temporais multivariadas no formato (N x d_all) - usada para calcular métricas locais
     w : int
         Tamanho da janela deslizante
     w0 : int
@@ -289,8 +291,8 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
     Retorna:
     -------
         CP : lista de índices dos changepoints
-        M0 : lista de médias originais estimadas nas janelas
-        S0 : lista de matrizes de covariância originais estimadas nas janelas
+        M0 : lista de médias originais estimadas nas janelas (para X_all)
+        S0 : lista de matrizes de covariância originais estimadas nas janelas (para X_all)
         elapsedTime : tempo total de execução
         vote_counts : contagem de votos
         vote_probs : probabilidades dos votos
@@ -359,11 +361,17 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
         
         return prob
 
-    # Armazenar o scaler para uso posterior
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
+    # Padronizar apenas X para detecção de changepoints
+    scaler_X = StandardScaler()
+    X_scaled = scaler_X.fit_transform(X)
+    
+    # Verificar se as dimensões são compatíveis
     N, d = X_scaled.shape
+    N_all, d_all = X_all.shape
+    
+    if N != N_all:
+        raise ValueError(f"X e X_all devem ter o mesmo número de amostras: {N} vs {N_all}")
+    
     vote_n_thr = int(np.floor(w * vote_n_thr))
     
     # Prior usando distribuição beta-binomial
@@ -378,8 +386,8 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
     votes = {i: [] for i in range(N)}
     lcp = 0
     CP = []
-    M0 = []  # Vai armazenar médias na escala original
-    S0 = []  # Vai armazenar covariâncias na escala original
+    M0 = []  # Vai armazenar médias na escala original de X_all
+    S0 = []  # Vai armazenar covariâncias na escala original de X_all
     
     vote_counts = np.zeros(N)
     vote_probs = np.zeros(N)
@@ -390,14 +398,14 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
     for n in range(N):
         if n >= w - 1:
             if n == lcp + w0:
-                # Calcular estatísticas na escala original
-                x_w0_orig = X[n - w0 + 1 : n + 1]
+                # Calcular estatísticas na escala original usando X_all
+                x_w0_orig = X_all[n - w0 + 1 : n + 1]
                 m_w0 = np.mean(x_w0_orig, axis=0)
                 s_w0 = np.cov(x_w0_orig, rowvar=False)
                 M0.append(m_w0)
                 S0.append(s_w0)
 
-            # Usar dados padronizados para detecção
+            # Usar dados padronizados de X para detecção
             Xw = X_scaled[n - w + 1 : n + 1]
             
             LLR_h = []
@@ -449,13 +457,11 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
                 num_votes = len(votes_list)
                 
                 if num_votes >= vote_n_thr:
-                    print(f'Votos: {votes_list}; prior: {prior_v[num_votes - 1]}')
                     if aggreg == 'posterior':
                         agg_vote = votes_pos(votes_list, prior_v[num_votes - 1])
                     else:  # aggreg == 'mean'
                         agg_vote = np.mean(votes_list)
 
-                    print(f'Probabilidade agregada: {agg_vote}')
                     agg_probs[n - w + 1] = agg_vote
                     
                     if agg_vote > vote_p_thr:
@@ -464,11 +470,11 @@ def vwcd_mv(X, w, w0, ab, p_thr, vote_p_thr, vote_n_thr, y0, yw, aggreg, verbose
                         lcp = n - w + 1
                         CP.append(lcp)
 
-                        # Calcular estatísticas na escala original para o novo segmento
+                        # Calcular estatísticas na escala original para o novo segmento usando X_all
                         if len(CP) > 1:
                             start_idx = CP[-2]
                             end_idx = CP[-1]
-                            segment_orig = X[start_idx:end_idx]
+                            segment_orig = X_all[start_idx:end_idx]
                             M0.append(np.mean(segment_orig, axis=0))
                             S0.append(np.cov(segment_orig, rowvar=False))
 
