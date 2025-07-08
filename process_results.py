@@ -232,6 +232,9 @@ def compute_clusters_stats(df_surv: pd.DataFrame):
     stats_time = grouped_by_cluster['time'].agg(['mean', 'median', 'std'])
     stats_time.columns = ['time_mean', 'time_median', 'time_std']
     
+    # calcular a quantidade total de intervalos
+    interval_count = grouped_by_cluster['time'].count().to_frame('interval_count')
+
     prop_events = (grouped_by_cluster['event'].sum() / grouped_by_cluster['time'].count()).to_frame('event_frequency')
 
     # Construir a Série Temporal Combinada a partir dos Arquivos
@@ -280,7 +283,7 @@ def compute_clusters_stats(df_surv: pd.DataFrame):
     if not filtered_time_series_list:
         print("\nAVISO: Nenhuma série temporal foi encontrada. As estatísticas das métricas não serão calculadas.")
         # Retorna apenas as estatísticas de duração e eventos
-        return pd.concat([stats_time, prop_events], axis=1)
+        return pd.concat([stats_time, prop_events, interval_count], axis=1)
 
     # Concatena todos os pedaços em um único DataFrame
     df_ts_combined = pd.concat(filtered_time_series_list, ignore_index=True)
