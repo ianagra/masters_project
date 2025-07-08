@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
-def plot_changepoints(data, client, site, variable, ylim=None, multivariate=False, 
+def plot_changepoints(data, client, site, variable, ref_cp_metric, ylim=None, multivariate=False, 
                  plot_votes=True, plot_probs=True, save_fig=False):
     """
     Plota os valores de uma variável ao longo do tempo com changepoints destacados como linhas verticais,
@@ -55,9 +55,9 @@ def plot_changepoints(data, client, site, variable, ylim=None, multivariate=Fals
         votes_column = 'votes'
         probs_column = 'agg_probs'
     else:
-        changepoint_column = f"{variable}_cp"
-        votes_column = f"{variable}_votes"
-        probs_column = f"{variable}_agg_probs"
+        changepoint_column = f"{ref_cp_metric}_cp"
+        votes_column = f"{ref_cp_metric}_votes"
+        probs_column = f"{ref_cp_metric}_agg_probs"
     
     # Lista de colunas necessárias baseada nos parâmetros
     required_columns = [variable, changepoint_column]
@@ -145,7 +145,7 @@ def plot_changepoints(data, client, site, variable, ylim=None, multivariate=Fals
     plt.show()
 
 
-def plot_pairs(data, pairs, survival=True, local_mean=True, changepoints=True, 
+def plot_pairs(data, pairs, cp_ref_metric, survival=True, local_mean=True, changepoints=True, 
                plot_votes=True, plot_probs=True, multivariate=False, thr_max=900,
                rtt_max=250, save_fig=False, filename=None, legend_pos='upper left'):
     """
@@ -258,6 +258,10 @@ def plot_pairs(data, pairs, survival=True, local_mean=True, changepoints=True,
             df = pd.read_parquet(file_path)
             all_timestamps.extend(df['timestamp'])
     
+        if cp_ref_metric not in df.columns:
+            print(f"Coluna {cp_ref_metric} não encontrada no arquivo {file_path}.")
+            break
+
     # Determinar limites globais do eixo x
     x_min, x_max = min(all_timestamps), max(all_timestamps)
     
@@ -328,7 +332,7 @@ def plot_pairs(data, pairs, survival=True, local_mean=True, changepoints=True,
         for variable in variables:
             ax_main = axes_dict[(variable, 'main', pair_idx)]
             
-            changepoint_column = 'cp' if multivariate else f"{variable}_cp"
+            changepoint_column = 'cp' if multivariate else f"{cp_ref_metric}_cp"
             votes_column = 'votes' if multivariate else f"{variable}_votes"
             probs_column = 'agg_probs' if multivariate else f"{variable}_agg_probs"
 
@@ -418,7 +422,7 @@ def plot_pairs(data, pairs, survival=True, local_mean=True, changepoints=True,
     plt.show()
 
 
-def plot_decrement(clients, metric, decrement=True, multivariate=False, save_fig=False, filename=None):
+def plot_decrement(clients, metric, cp_ref_metric, decrement=True, multivariate=False, save_fig=False, filename=None):
     """
     Analisa os pontos de mudança (cp) em arquivos Parquet para uma lista de clientes e uma métrica 
     e plota gráficos do decremento ou incremento da métrica lado a lado.
@@ -439,7 +443,7 @@ def plot_decrement(clients, metric, decrement=True, multivariate=False, save_fig
         dataset_dir = 'datasets/ts_ndt_results'
 
     # Coluna de changepoints
-    cp_col = 'cp' if multivariate else f'{metric}_cp'
+    cp_col = 'cp' if multivariate else f'{cp_ref_metric}_cp'
 
     # Inicializa o dicionário de resultados
     all_results = {}
@@ -514,7 +518,7 @@ def plot_decrement(clients, metric, decrement=True, multivariate=False, save_fig
     return None
 
 
-def plot_decrement_dual(client_list1, client_list2, metric, decrement=True, multivariate=False, save_fig=False, filename=None):
+def plot_decrement_dual(client_list1, client_list2, metric, cp_ref_metric, decrement=True, multivariate=False, save_fig=False, filename=None):
     """
     Analisa os pontos de mudança (cp) em arquivos Parquet para duas listas de clientes e uma métrica, 
     e plota gráficos em duas colunas: uma para cada lista de clientes.
@@ -539,7 +543,7 @@ def plot_decrement_dual(client_list1, client_list2, metric, decrement=True, mult
         dataset_dir = 'datasets/ts_ndt_results'
 
     # Coluna de changepoints
-    cp_col = 'cp' if multivariate else f'{metric}_cp'
+    cp_col = 'cp' if multivariate else f'{cp_ref_metric}_cp'
 
     # Inicializa o dicionário de resultados
     all_results = {}
