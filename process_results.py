@@ -202,100 +202,133 @@ def calculate_cluster_proportions(df_surv):
     return client_proportions, site_proportions
 
 
-def compute_clusters_stats(df_surv: pd.DataFrame):
+def compute_clusters_stats(df_surv: pd.DataFrame, model):
     """
     Cria um dataframe com as estatísticas descritivas de cada cluster.
-
-    Para cada intervalo, a função busca a respectiva série temporal a partir 
-    de arquivos Parquet individuais, identificados pelo cliente e servidor. 
-    Em seguida, cria uma série temporal única com todos os dados relevantes 
-    para calcular as estatísticas das métricas.
-
+    
     Args:
         df_surv (pd.DataFrame): DataFrame com os intervalos. Deve conter as 
-            colunas 'start', 'stop', 'event', 'cluster', 'cliente' e 'servidor'.
-            As colunas 'timestamp_start' e 'timestamp_end' devem ser do tipo datetime.
-
+            colunas 'timestamp_start', 'timestamp_end', 'time', 'event', 'cluster', 'client', 'site'.
+    
     Returns:
-        pd.DataFrame: Um novo dataframe com as estatísticas descritivas para 
-                      cada cluster.
+        pd.DataFrame: DataFrame com estatísticas descritivas para cada cluster.
     """
     # Validação e Preparação
-    for col in ['timestamp_start', 'timestamp_end', 'time', 'event', 'cluster', 'client', 'site']:
+    required_cols = ['timestamp_start', 'timestamp_end', 'time', 'event', 'cluster', 'client', 'site']
+    for col in required_cols:
         if col not in df_surv.columns:
             raise ValueError(f"A coluna '{col}' está faltando no DataFrame de sobrevivência (df_surv).")
     
     metrics = ['throughput_download', 'throughput_upload', 'rtt_download', 'rtt_upload']
-
-    grouped_by_cluster = df_surv.groupby('cluster')
+    time_series_path = 'datasets/ts_ndt_cp'
     
-    stats_time = grouped_by_cluster['time'].agg(['mean', 'median', 'std'])
-    stats_time.columns = ['time_mean', 'time_median', 'time_std']
-    
-    # calcular a quantidade total de intervalos
-    interval_count = grouped_by_cluster['time'].count().to_frame('interval_count')
-
-    prop_events = (grouped_by_cluster['event'].sum() / grouped_by_cluster['time'].count()).to_frame('event_frequency')
-
-    # Construir a Série Temporal Combinada a partir dos Arquivos
-
-    filtered_time_series_list = []
-    
-    # Cache para evitar ler o mesmo arquivo múltiplas vezes
+    # Cache para arquivos lidos
     read_files_cache = {}
-    time_series_path = 'datasets/ts_ndt_cp'  # Caminho para os arquivos Parquet
-
-    print("Processando intervalos e lendo séries temporais...")
-    for _, interval in df_surv.iterrows():
-        client = interval['client']
-        server = interval['site']
+    
+    # Lista para armazenar estatísticas de cada cluster
+    cluster_stats_list = []
+    
+    # Iterar sobre cada cluster único
+    unique_clusters = df_surv['cluster'].unique()
+    print(f"Processando {len(unique_clusters)} clusters...")
+    
+    for cluster_id in unique_clusters:
+        print(f"\nProcessando cluster {cluster_id}...")
         
-        file_name = f"{client}_{server}.parquet"
-        file_path = os.path.join(time_series_path, file_name)
-
-        try:
-            # Verifica se o arquivo já foi lido e está no cache
-            if file_path not in read_files_cache:
-                print(f"Lendo arquivo: {file_name}")
-                df_ts_raw = pd.read_parquet(file_path)
-                df_ts_raw['timestamp'] = pd.to_datetime(df_ts_raw['timestamp'])
-                # Adiciona ao cache
-                read_files_cache[file_path] = df_ts_raw
-            else:
-                # Utiliza o DataFrame do cache
-                df_ts_raw = read_files_cache[file_path]
-
-            # Filtra a série temporal para o período do intervalo
-            mask = (df_ts_raw['timestamp'] >= interval['timestamp_start']) & (df_ts_raw['timestamp'] <= interval['timestamp_end'])
-            filtered_time_series = df_ts_raw.loc[mask].copy()
+        # Filtrar dados do cluster atual
+        cluster_data = df_surv[df_surv['cluster'] == cluster_id]
+        
+        # Calcular estatísticas de tempo e eventos
+        time_stats = {
+            'cluster': cluster_id,
+            'interval_count': len(cluster_data),
+            'time_mean': cluster_data['time'].mean(),
+            'time_median': cluster_data['time'].median(),
+            'time_std': cluster_data['time'].std(),
+            'event_frequency': cluster_data['event'].sum() / len(cluster_data)
+        }
+        
+        # Coletar séries temporais para este cluster
+        cluster_time_series_list = []
+        
+        for _, interval in cluster_data.iterrows():
+            client = interval['client']
+            server = interval['site']
             
-            # Adiciona a informação do cluster a este "pedaço" da série
-            filtered_time_series['cluster'] = interval['cluster']
+            file_name = f"{client}_{server}.parquet"
+            file_path = os.path.join(time_series_path, file_name)
             
-            filtered_time_series_list.append(filtered_time_series)
+            try:
+                # Verificar cache
+                if file_path not in read_files_cache:
+                    df_ts_raw = pd.read_parquet(file_path)
+                    df_ts_raw['timestamp'] = pd.to_datetime(df_ts_raw['timestamp'])
+                    read_files_cache[file_path] = df_ts_raw
+                else:
+                    df_ts_raw = read_files_cache[file_path]
+                
+                # Filtrar período do intervalo
+                mask = ((df_ts_raw['timestamp'] >= interval['timestamp_start']) & 
+                       (df_ts_raw['timestamp'] <= interval['timestamp_end']))
+                filtered_ts = df_ts_raw.loc[mask, metrics].copy()
+                
+                if not filtered_ts.empty:
+                    cluster_time_series_list.append(filtered_ts)
+                    
+            except FileNotFoundError:
+                print(f"  AVISO: Arquivo não encontrado: {file_name}")
+                continue
+        
+        # Calcular estatísticas das métricas se houver dados
+        if cluster_time_series_list:
+            # Concatenar todas as séries temporais do cluster
+            cluster_ts_combined = pd.concat(cluster_time_series_list, ignore_index=True)
+            
+            # Calcular estatísticas para cada métrica
+            for metric in metrics:
+                metric_data = cluster_ts_combined[metric]
+                time_stats[f'{metric}_mean'] = metric_data.mean()
+                time_stats[f'{metric}_median'] = metric_data.median()
+                time_stats[f'{metric}_std'] = metric_data.std()
 
-        except FileNotFoundError:
-            print(f"  AVISO: Arquivo não encontrado e será ignorado: {file_path}")
-            continue
+        else:
+            # Se não houver dados de séries temporais, preencher com NaN
+            for metric in metrics:
+                time_stats[f'{metric}_mean'] = np.nan
+                time_stats[f'{metric}_median'] = np.nan
+                time_stats[f'{metric}_std'] = np.nan
+        
+        # Adicionar função de sobrevivência
+        kmf = model.kmfs[cluster_id]['kmf']
+        surv_fcn_df = kmf.survival_function_.reset_index()
+        surv_fcn_df.columns = ['time', 'survival_probability']
+        
+        # Definir tempos fixos para interpolação
+        fixed_times = [1, 7, 15, 30, 60, 90]
+        
+        # Interpolar valores da função de sobrevivência nos tempos fixos
+        interpolated_probs = np.interp(
+            fixed_times, 
+            surv_fcn_df['time'].values, 
+            surv_fcn_df['survival_probability'].values
+        )
+        
+        # Criar lista de pontos [tempo, probabilidade] para os tempos fixos
+        survival_function = []
+        for i in range(len(fixed_times)):
+            point = {
+                'time_days': fixed_times[i],
+                'survival_probability': round(interpolated_probs[i], 3)
+            }
+            survival_function.append(point)
+        
+        time_stats['survival_function'] = survival_function
+        
+        cluster_stats_list.append(time_stats)
     
-    # Calcular Estatísticas das Métricas
+    # Criar DataFrame final
+    result_df = pd.DataFrame(cluster_stats_list)
     
-    if not filtered_time_series_list:
-        print("\nAVISO: Nenhuma série temporal foi encontrada. As estatísticas das métricas não serão calculadas.")
-        # Retorna apenas as estatísticas de duração e eventos
-        return pd.concat([stats_time, prop_events, interval_count], axis=1)
-
-    # Concatena todos os pedaços em um único DataFrame
-    df_ts_combined = pd.concat(filtered_time_series_list, ignore_index=True)
+    print(f"\nProcessamento concluído. Estatísticas calculadas para {len(result_df)} clusters.")
     
-    # Calcula as estatísticas para cada métrica, agrupando pelo cluster
-    metrics_stats = df_ts_combined.groupby('cluster')[metrics].agg(['mean', 'median', 'std'])
-    
-    # Aplaina o MultiIndex das colunas (ex: ('rtt_mean', 'mean') -> 'rtt_mean_mean')
-    metrics_stats.columns = ['_'.join(col).strip() for col in metrics_stats.columns.values]
-
-    # Combinar todos os resultados
-    
-    df_final = pd.concat([stats_time, prop_events, metrics_stats], axis=1)
-    
-    return df_final
+    return result_df
