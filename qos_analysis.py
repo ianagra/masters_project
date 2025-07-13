@@ -1,118 +1,245 @@
-import pandas as pd
+# network_qos_llm.py
+"""Automatic QoS analysis pipeline using DeepSeek‑R1‑14B (Ollama)
+
+This script implements a fully automated, multi‑stage workflow that analyses
+network QoS datasets with the help of a Large Language Model.  It follows the
+specification provided by the user and leverages advanced, externalised prompt
+templates (see *prompt_templates.py*).
+"""
+from __future__ import annotations
+
 import json
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
+import os
+import textwrap
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Sequence
 
-# Log file for saving prompts and responses
-LOG_FILE = "qos_analysis_log.txt"
+import pandas as pd
+from langchain_ollama import ChatOllama  # pip install langchain‑ollama
+
+from prompt_templates import PROMPTS  # ← externalised templates
+
+###############################################################################
+# Configuration
+###############################################################################
+
+# Ollama endpoint running DeepSeek‑R1‑14B (change if different)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_MODEL_NAME = "deepseek-r1:14b"
+MODEL_TEMPERATURE = 0.7
+LLM_CTX_SIZE = 8192
+
+# Where to save artefacts
+LOG_DIR = Path("logs")
+REPORT_DIR = Path("reports")
+LOG_DIR.mkdir(exist_ok=True)
+REPORT_DIR.mkdir(exist_ok=True)
+
+# Timestamp used for this run
+RUN_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
+LOG_FILE = LOG_DIR / f"qos_analysis_{RUN_TS}.txt"
+
+###############################################################################
+# Helper classes
+###############################################################################
+
+class PromptLogger:
+    """Append‑only TXT logger for prompts & responses."""
+
+    def __init__(self, filepath: Path):
+        self.filepath = filepath
+        filepath.write_text("# QoS‑LLM log file\n")  # truncate or create
+
+    def log(self, title: str, content: str | Dict[str, Any] | List[Any]):
+        delim = "=" * 80
+        body = json.dumps(content, indent=2) if isinstance(content, (dict, list)) else content
+        with self.filepath.open("a", encoding="utf‑8") as f:
+            f.write(f"\n{delim}\n{title}\n{delim}\n{body}\n")
 
 
-def load_csv(metric: str):
-    """
-    Load survival, coefficients, and cluster stats CSVs for the given metric.
-    """
-    df_surv = pd.read_csv(f'dataset_survival_{metric}.csv')
-    df_coef = pd.read_csv(f'coefficients_odds_ratio_{metric}.csv')
-    df_stats = pd.read_csv(f'clusters_stats_{metric}.csv')
-    return df_surv, df_coef, df_stats
+class LLM:
+    """Wrapper around ChatOllama for brevity."""
+
+    def __init__(self):
+        self.chat = ChatOllama(
+            model=LLM_MODEL_NAME,
+            base_url=OLLAMA_BASE_URL,
+            temperature=MODEL_TEMPERATURE,
+            num_ctx=LLM_CTX_SIZE,
+        )
+
+    def __call__(self, prompt: str) -> str:
+        return self.chat.invoke(prompt).content.strip()
 
 
-def jsonify_df(df: pd.DataFrame):
-    """
-    Convert a DataFrame to a JSON-serializable Python object.
-    """
-    return json.loads(df.to_json(orient='records'))
+###############################################################################
+# Core analysis workflow
+###############################################################################
 
+class QoSAnalyzer:
+    """Runs the 5‑stage analysis for both metrics and produces reports."""
 
-def run_step(model, prompt: str, step_name: str, log_file: str):
-    """
-    Generic runner: sends prompt, gets response, and logs both.
-    """
-    # Invoke the model
-    response = model.invoke([HumanMessage(content=prompt)]).content
+    METRICS = {
+        "throughput_download": {
+            "cluster_stats": "clusters_stats_throughput_download.csv",
+            "coefficients": "coefficients_odds_ratio_throughput_download.csv",
+            "survival": "dataset_survival_throughput_download.csv",
+        },
+        "rtt_upload": {
+            "cluster_stats": "clusters_stats_rtt_upload.csv",
+            "coefficients": "coefficients_odds_ratio_rtt_upload.csv",
+            "survival": "dataset_survival_rtt_upload.csv",
+        },
+    }
 
-    # Append prompt and response to log
-    with open(log_file, "a") as f:
-        f.write(f"===== {step_name} =====\n")
-        f.write("PROMPT:\n")
-        f.write(prompt + "\n\n")
-        f.write("RESPONSE:\n")
-        f.write(response + "\n\n")
+    def __init__(self, llm: LLM, logger: PromptLogger):
+        self.llm = llm
+        self.logger = logger
+        self.system_prompt = PROMPTS["system"]  # reusable preamble
 
-    return response
+    # --------------------------------------------------------------
+    # Public API
+    # --------------------------------------------------------------
+    def run(self):
+        approach_reports: Dict[str, str] = {}
 
+        for metric, paths in self.METRICS.items():
+            self.logger.log("INFO", f"Starting analysis for metric: {metric}")
+            approach_reports[metric] = self._analyze_metric(metric, paths)
+
+        # Consolidation
+        consolidated_report = self._consolidate_reports(approach_reports)
+        report_path = REPORT_DIR / f"qos_consolidated_{RUN_TS}.txt"
+        report_path.write_text(consolidated_report)
+        self.logger.log("REPORT – Consolidated QoS", consolidated_report)
+        print(f"✅ Consolidated report saved to: {report_path}")
+
+    # --------------------------------------------------------------
+    # Metric‑specific workflow
+    # --------------------------------------------------------------
+    def _analyze_metric(self, metric: str, paths: Dict[str, str]) -> str:
+        # Step 1 – Cluster description
+        clusters_df = pd.read_csv(paths["cluster_stats"])
+        clusters_json = clusters_df.to_dict(orient="records")
+        prompt1 = self._wrap_prompt(
+            PROMPTS["cluster_analysis"].format(
+                metric=metric,
+                clusters_json=json.dumps(clusters_json)[:4000],
+            )
+        )
+        self.logger.log(f"PROMPT 1 – {metric}", prompt1)
+        cluster_desc = self.llm(prompt1)
+        self.logger.log(f"RESPONSE 1 – {metric}", cluster_desc)
+
+        # Step 2 – Critical entities
+        coef_df = pd.read_csv(paths["coefficients"])
+        coef_json = coef_df.to_dict(orient="records")
+        prompt2 = self._wrap_prompt(
+            PROMPTS["critical_entities"].format(
+                metric=metric,
+                cluster_description=cluster_desc,
+                coefficients_json=json.dumps(coef_json)[:4000],
+            )
+        )
+        self.logger.log(f"PROMPT 2 – {metric}", prompt2)
+        critical_raw = self.llm(prompt2)
+        self.logger.log(f"RESPONSE 2 – {metric}", critical_raw)
+        critical_entities = self._parse_list(critical_raw)
+
+        # Step 3 – Interval analysis per entity
+        surv_df = pd.read_csv(paths["survival"])
+        entity_reports: List[str] = []
+        for entity in critical_entities:
+            intervals_json = self._extract_intervals_json(surv_df, entity)
+            prompt3 = self._wrap_prompt(
+                PROMPTS["element_diagnosis"].format(
+                    metric=metric,
+                    entity_id=entity,
+                    intervals_json=json.dumps(intervals_json)[:4000],
+                )
+            )
+            self.logger.log(f"PROMPT 3 – {metric} – {entity}", prompt3)
+            entity_report = self.llm(prompt3)
+            self.logger.log(f"RESPONSE 3 – {metric} – {entity}", entity_report)
+            entity_reports.append(entity_report)
+
+        # Step 4 – Approach‑level report
+        prompt4 = self._wrap_prompt(
+            PROMPTS["metric_report"].format(
+                metric=metric,
+                cluster_description=cluster_desc,
+                entities_reports="\n\n".join(entity_reports),
+            )
+        )
+        self.logger.log(f"PROMPT 4 – {metric}", prompt4)
+        approach_report = self.llm(prompt4)
+        self.logger.log(f"RESPONSE 4 – {metric}", approach_report)
+
+        # Persist
+        path = REPORT_DIR / f"qos_{metric}_{RUN_TS}.txt"
+        path.write_text(approach_report)
+        self.logger.log("INFO", f"Saved approach report to {path}")
+
+        return approach_report
+
+    # --------------------------------------------------------------
+    # Prompt consolidation
+    # --------------------------------------------------------------
+    def _consolidate_reports(self, reports: Dict[str, str]) -> str:
+        prompt5 = self._wrap_prompt(
+            PROMPTS["consolidated_report"].format(
+                report_throughput=reports["throughput_download"],
+                report_rtt=reports["rtt_upload"],
+            )
+        )
+        self.logger.log("PROMPT 5 – Consolidation", prompt5)
+        consolidated = self.llm(prompt5)
+        self.logger.log("RESPONSE 5 – Consolidation", consolidated)
+        return consolidated
+
+    # --------------------------------------------------------------
+    # Helpers
+    # --------------------------------------------------------------
+    def _wrap_prompt(self, body: str) -> str:
+        """Prepend the system prompt to the body."""
+        return f"{self.system_prompt}\n\n{body}"
+
+    @staticmethod
+    def _parse_list(raw: str) -> List[str]:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @staticmethod
+    def _extract_intervals_json(df: pd.DataFrame, entity: str) -> List[Dict[str, Any]]:
+        mask = (df["client"] == entity) | (df["server"] == entity)
+        subset = df.loc[mask].copy()
+        cols = [
+            "client",
+            "server",
+            "timestamp_start",
+            "timestamp_end",
+            "time",
+            "cluster",
+            "event",
+            "throughput_download",
+            "throughput_upload",
+            "rtt_download",
+            "rtt_upload",
+        ]
+        return subset[cols].to_dict(orient="records")
+
+###############################################################################
+# Entry point
+###############################################################################
 
 def main():
-    # Initialize/clear the log file
-    open(LOG_FILE, "w").close()
-
-    # Initialize the LLM using deepseek-r1-14b
-    model = ChatOllama(
-        model="deepseek-r1:14b",
-        base_url="http://localhost:10000",
-        temperature=0,
-        num_ctx=8192
-    )
-
-    metrics = ["throughput_download", "rtt_upload"]
-    approach_reports = {}
-
-    for metric in metrics:
-        # Load data
-        df_surv, df_coef, df_stats = load_csv(metric)
-
-        # Prepare JSON context
-        cluster_stats_json = jsonify_df(df_stats)
-        coef_json = jsonify_df(df_coef)
-        surv_json = jsonify_df(df_surv)
-
-        # Step 1: Cluster Analysis
-        prompt1 = (
-            "Step 1: Cluster Analysis - Given the following cluster statistics in JSON format, "
-            "generate a detailed descriptive summary of each performance cluster in clear, operational language for network operators.\n\n"
-            + json.dumps(cluster_stats_json, indent=2)
-        )
-        desc = run_step(model, prompt1, "Step 1: Cluster Analysis", LOG_FILE)
-
-        # Step 2: Identify Critical Elements
-        prompt2 = (
-            "Step 2: Identify Critical Elements - Using the following odds ratio data in JSON format and the cluster descriptions, "
-            "list network elements (clients and servers) that are critical (high odds ratios for unstable clusters) and explain why each is critical.\n\n"
-            + "Odds Ratio Data:\n" + json.dumps(coef_json, indent=2) + "\n\n"
-            + "Cluster Descriptions:\n" + desc
-        )
-        crit = run_step(model, prompt2, "Step 2: Identify Critical Elements", LOG_FILE)
-
-        # Step 3: Interval Analysis
-        prompt3 = (
-            "Step 3: Interval Analysis - For each critical element listed, examine its historical intervals from the survival data in JSON format. "
-            "Analyze temporal evolution, interactions with other elements, and performance metrics. Provide a detailed diagnostic for each.\n\n"
-            + "Survival Data:\n" + json.dumps(surv_json, indent=2) + "\n\n"
-            + "Critical Elements:\n" + crit
-        )
-        diag = run_step(model, prompt3, "Step 3: Interval Analysis", LOG_FILE)
-
-        # Step 4: Generate Approach Report
-        prompt4 = (
-            f"Step 4: Generate Approach Report for metric {metric} - Using outputs from Steps 1, 2, and 3, create a detailed QoS report for network operators.\n\n"
-            + "Cluster Analysis:\n" + desc + "\n\n"
-            + "Critical Elements Analysis:\n" + crit + "\n\n"
-            + "Interval Diagnostics:\n" + diag
-        )
-        rpt = run_step(model, prompt4, f"Step 4: Approach Report ({metric})", LOG_FILE)
-        approach_reports[metric] = rpt
-
-    # Final Step: Consolidated QoS Report
-    final_prompt = (
-        "Final Step: Consolidated QoS Report - You have individual reports for different metrics. Compare and contrast these approaches, "
-        "highlight complementarities and peculiarities, and provide practical recommendations for network operators.\n\n"
-        + "\n\n".join([f"Report for {m}:\n{r}" for m, r in approach_reports.items()])
-    )
-    final_report = run_step(model, final_prompt, "Final Step: Consolidated QoS Report", LOG_FILE)
-
-    # Output final report
-    print("=== Consolidated QoS Report ===\n")
-    print(final_report)
+    logger = PromptLogger(LOG_FILE)
+    llm = LLM()
+    analyzer = QoSAnalyzer(llm, logger)
+    analyzer.run()
 
 
 if __name__ == "__main__":
