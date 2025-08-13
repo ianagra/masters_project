@@ -1,0 +1,77 @@
+## QoS Assessment Report: rtt_upload Approach  
+
+### 1. Executive Summary  
+The rtt_upload analysis reveals a stark contrast between two behavioral regimes. **Cluster 0** (high‑risk) is characterized by short, highly‑volatile intervals, low throughput, and elevated upload RTTs (~ 98 ms). **Cluster 1** (low‑risk) shows long, stable periods with high throughput (~ 660 Mbps) and low upload RTTs (~ 20 ms). Five client/server pairs exhibit strong statistical association with the high‑risk cluster: `client09`, `client12`, `client02`, `client07`, and the backbone node `rnp_rj`. Among them, `client12` and `client07` display intermittent high‑risk episodes linked to specific server paths, while `client02` remains largely stable but occasionally experiences elevated RTT variability on RNP backbone links. `rnp_rj` remains consistently low‑risk, suggesting that the observed instabilities are primarily client‑side or path‑specific rather than destination‑driven.
+
+### 2. Detailed Findings  
+
+#### 2.1 Cluster Characteristics  
+- **Cluster 0 (High‑Risk)**  
+  - **Duration & Frequency**: Mean interval 10.5 days, event frequency 0.645.  
+  - **Throughput**: Avg. download 307 Mbps, upload 281 Mbps.  
+  - **Upload RTT**: Mean 98 ms, std. dev. high, indicating congestion or routing instability.  
+  - **Survival**: 0.59 after 7 days, 0.11 after 60 days.  
+
+- **Cluster 1 (Low‑Risk)**  
+  - **Duration & Frequency**: Mean interval 31.5 days, event frequency 0.030.  
+  - **Throughput**: Avg. download 661 Mbps, upload 660 Mbps.  
+  - **Upload RTT**: Mean 20 ms, low variability.  
+  - **Survival**: 1.0 up to 15 days, 0.961 at 30 days.  
+
+#### 2.2 Critical Elements  
+Logistic regression coefficients (log‑odds of belonging to Cluster 1) are strongly negative for the following entities, indicating a propensity toward the high‑risk cluster:
+
+| Element | Coefficient |
+|---------|-------------|
+| client09 | -0.992 |
+| rnp_rj   | -0.903 |
+| client12 | -0.782 |
+| client02 | -0.652 |
+| client07 | -0.604 |
+
+These values highlight the most problematic client/server pairs for upload RTT performance.
+
+#### 2.3 Individual Diagnoses  
+
+- **client12**  
+  - **Temporal Pattern**: 56 % of intervals in Cluster 1, 44 % in Cluster 0.  
+  - **Key Event**: Late‑June shift to Cluster 1 across all servers, brief return to Cluster 0 on `rnp_sp` (17–23 Jul).  
+  - **Implication**: Path‑specific congestion or routing change on `rnp_sp`.  
+
+- **client07**  
+  - **Temporal Pattern**: 62 % Cluster 1, 38 % Cluster 0.  
+  - **Key Event**: Persistent high‑risk on `gru05`, `gru06`, `rnp_rj`, `rnp_sp`; low‑risk only on `gru03`.  
+  - **Implication**: Possible peering bottleneck or sub‑optimal routing on the majority of paths.  
+
+- **client02**  
+  - **Temporal Pattern**: ~90 % Cluster 1, ~10 % Cluster 0.  
+  - **Key Event**: Mid‑June transition to Cluster 0 on `rnp_rj` and `rnp_sp` with increased RTT variability.  
+  - **Implication**: Routing change or link degradation on RNP backbone.  
+
+- **rnp_rj**  
+  - **Temporal Pattern**: 100 % Cluster 0 (low‑risk).  
+  - **Implication**: Stable destination; observed instabilities are not due to the server itself.  
+
+- **client09**  
+  - **Status**: Identified as high‑risk by coefficient but lacking interval‑level diagnostics in the provided data.  
+
+### 3. Recommended Actions  
+
+- **Path‑Specific Monitoring**  
+  - Deploy continuous traceroute and pathping from `client12` to `rnp_sp` during the 17–23 Jul window to confirm routing changes.  
+  - Run similar tests from `client07` to `gru05`, `gru06`, `rnp_rj`, and `rnp_sp` to detect asymmetric or congested links.  
+
+- **BGP and Peering Review**  
+  - Examine BGP update logs for `client02` during mid‑June to identify any prefix withdrawals or route advertisements that could explain the RTT spike on `rnp_rj`/`rnp_sp`.  
+  - Coordinate with RNP peering partners to assess potential bottlenecks affecting the identified high‑risk paths.  
+
+- **Client‑Side Load Analysis**  
+  - Investigate local network utilization on `client12`, `client07`, and `client02` during high‑risk intervals to rule out client‑side congestion.  
+
+- **Threshold Definition and Alerting**  
+  - Set automated alerts for upload RTT > 25 ms or throughput < 700 Mbps on the identified paths, triggering traceroute and BGP checks.  
+
+- **Documentation and Follow‑Up**  
+  - Record all findings, including any observed routing changes, and schedule a follow‑up review after implementing corrective actions to verify stability improvements.  
+
+These steps will isolate the root causes of upload RTT instability and enable targeted remediation, ensuring sustained QoS for the RNP network.

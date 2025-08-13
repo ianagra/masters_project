@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import os
+from collections import defaultdict
 from VWCD import vwcd, vwcd_mv
+
 
 def map_mac_to_client(df, mac_column='ClientMac'):
     """
@@ -512,3 +514,86 @@ def create_survival_dataset(data, feature, max_gap_days=3, multivariate=False):
     else:
         survival_df.to_parquet(f'datasets/survival_{data}.parquet', index=False)
     return survival_df
+
+
+def get_file_list(client_range, servers):
+    """Gera uma lista de nomes de arquivo com base nos clientes e servidores."""
+    files = []
+    for i in client_range:
+        client_id = f"client{i:02d}"
+        for server_id in servers:
+            files.append(f"{client_id}_{server_id}.parquet")
+    return files
+
+
+def calculate_entity_metrics_from_list(base_directory, file_list):
+    """
+    Calcula a média de métricas de desempenho para cada cliente e servidor
+    a partir de uma lista explícita de arquivos.
+    """
+    if not os.path.exists(base_directory):
+        print(f"❌ Erro: O diretório base '{base_directory}' não foi encontrado.")
+        print("Certifique-se de que o script está no local correto em relação ao diretório do projeto.")
+        return None
+
+    clients_data = defaultdict(lambda: defaultdict(lambda: {'sum': 0.0, 'count': 0}))
+    servers_data = defaultdict(lambda: defaultdict(lambda: {'sum': 0.0, 'count': 0}))
+    
+    metrics = ['throughput_download', 'throughput_upload', 'rtt_download', 'rtt_upload']
+
+    print(f"🔎 Processando arquivos do diretório: {base_directory}")
+    processed_files = 0
+    for filename in file_list:
+        file_path = os.path.join(base_directory, filename)
+        
+        if not os.path.exists(file_path):
+            continue # Pula arquivos que não existem no diretório
+
+        parts = filename.replace('.parquet', '').split('_')
+        client = parts[0]
+        server = '_'.join(parts[1:])
+
+        try:
+            df = pd.read_parquet(file_path)
+            processed_files += 1
+            existing_metrics = [m for m in metrics if m in df.columns]
+            if not existing_metrics:
+                continue
+
+            file_means = df[existing_metrics].mean()
+
+            for metric in existing_metrics:
+                if pd.notna(file_means[metric]):
+                    clients_data[client][metric]['sum'] += file_means[metric]
+                    clients_data[client][metric]['count'] += 1
+                    servers_data[server][metric]['sum'] += file_means[metric]
+                    servers_data[server][metric]['count'] += 1
+        except Exception as e:
+            print(f"⚠️ Não foi possível processar o arquivo {filename}: {e}")
+    
+    print(f"✅ {processed_files} arquivos processados.")
+
+    final_data = []
+    # Clientes
+    for entity, metric_data in clients_data.items():
+        row = {'entity': entity, 'type': 'client'}
+        for metric, values in metric_data.items():
+            row[metric] = values['sum'] / values['count'] if values['count'] > 0 else 0
+        final_data.append(row)
+
+    # Servidores
+    for entity, metric_data in servers_data.items():
+        row = {'entity': entity, 'type': 'server'}
+        for metric, values in metric_data.items():
+            row[metric] = values['sum'] / values['count'] if values['count'] > 0 else 0
+        final_data.append(row)
+        
+    if not final_data:
+        print("Nenhum dado foi processado para gerar o DataFrame.")
+        return pd.DataFrame()
+
+    result_df = pd.DataFrame(final_data).set_index('entity').fillna(0)
+    column_order = ['type'] + metrics
+    result_df = result_df[[col for col in column_order if col in result_df.columns]]
+    
+    return result_df

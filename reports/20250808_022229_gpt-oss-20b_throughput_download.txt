@@ -1,0 +1,72 @@
+## QoS Assessment Report: throughput_download Approach
+
+### 1. Executive Summary  
+The throughput‑based change‑point analysis reveals a clear dichotomy between **stable** (Cluster 1) and **unstable** (Cluster 0) operating regimes. Cluster 0 is characterized by short, volatile intervals, low bandwidth, and high latency, whereas Cluster 1 enjoys longer, smoother periods with superior throughput and lower RTTs. Logistic regression identifies **client02**, **client07**, **rnp_rj**, and **rnp_sp** as the most strongly associated with the high‑risk cluster. A focused diagnosis of **rnp_sp** shows a persistent high‑risk state, predominantly when communicating with **rnp_ba**, suggesting a systemic routing or congestion issue on that path.
+
+---
+
+### 2. Detailed Findings  
+
+#### 2.1 Cluster Characteristics  
+- **Cluster 0 (High‑Risk)**  
+  - **Interval Duration**: Mean 10.6 days, median 6.65 days, SD 13.8 days.  
+  - **Event Frequency**: 0.74 (high).  
+  - **Throughput**: Avg. download 452 Mbps, upload 429 Mbps; SD ≈ 270 Mbps.  
+  - **Latency**: Avg. RTT ≈ 60 ms; SD > 60 ms.  
+  - **Survival**: Drops to 18 % after 15 days.
+
+- **Cluster 1 (Low‑Risk)**  
+  - **Interval Duration**: Mean 24.3 days, median 19.6 days, SD 22.5 days.  
+  - **Event Frequency**: 0.078.  
+  - **Throughput**: Avg. download 633 Mbps, upload 684 Mbps; SD ≈ 200 Mbps.  
+  - **Latency**: Avg. RTT ≈ 17 ms; SD ≈ 5 ms.  
+  - **Survival**: ≈ 99 % at 15 days, ≈ 79 % after 60 days.
+
+These metrics confirm that Cluster 1 represents a **stable, low‑risk** regime, while Cluster 0 embodies **instability and high risk**.
+
+#### 2.2 Critical Elements  
+Logistic regression coefficients (log‑odds of belonging to Cluster 1) highlight the following elements as most strongly linked to the unstable regime (negative coefficients):
+
+| Element | Coefficient |
+|---------|-------------|
+| client02 | –1.95 |
+| client07 | –1.73 |
+| rnp_rj   | –1.37 |
+| rnp_sp   | –1.23 |
+
+A negative coefficient indicates a higher probability of falling into Cluster 0. Thus, traffic involving these clients or servers is a key indicator of QoS degradation.
+
+#### 2.3 Individual Diagnosis – rnp_sp  
+- **Cluster Distribution**: 10 of 16 intervals (62.5 %) fall into the high‑risk cluster.  
+- **Temporal Pattern**: After an initial high‑risk interval, the element remains in Cluster 0 for the remainder of the observation window, indicating a persistent issue rather than sporadic outages.  
+- **Interaction Profile**:  
+  - High‑risk intervals almost exclusively involve the partner server **rnp_ba** (except the first interval with **rnp_rj**).  
+  - A diverse set of clients (client 1, 3, 6, 10–16) participate, ruling out a client‑specific fault.  
+- **Hypothesis**: The sustained high RTT and throughput variability suggest a **routing or congestion problem** on the path between **rnp_sp** and **rnp_ba**.  
+- **Suggested Verification**: Execute `traceroute` and `ping` from **rnp_sp** to **rnp_ba** during a high‑risk interval to detect abnormal hops or packet loss. If such anomalies are found, investigate routing policies, peering agreements, or potential congestion points along that path.
+
+---
+
+### 3. Recommended Actions  
+
+- **Immediate Path Analysis**  
+  - Run `traceroute`/`ping` from **rnp_sp** to **rnp_ba** during identified high‑risk intervals.  
+  - Examine hop latency and packet loss; compare against baseline measurements from Cluster 1 periods.
+
+- **Routing Policy Review**  
+  - Verify BGP advertisements and route preferences between **rnp_sp** and **rnp_ba**.  
+  - Check for any recent policy changes or route flaps that could explain the instability.
+
+- **Traffic Engineering**  
+  - If congestion is detected, consider traffic shaping or alternative routing paths (e.g., via a different peering point).  
+  - Deploy QoS policies to prioritize critical traffic during high‑load periods.
+
+- **Client‑Side Monitoring**  
+  - For **client02** and **client07**, implement more granular monitoring (e.g., per‑session throughput and RTT) to confirm whether the instability originates at the client or the network path.  
+  - Coordinate with client ISPs to rule out local congestion or misconfiguration.
+
+- **Long‑Term Metrics Collection**  
+  - Extend the change‑point detection to include additional metrics (e.g., packet loss, jitter) to refine cluster definitions.  
+  - Automate alerts when an interval’s log‑odds cross a predefined threshold, enabling proactive remediation.
+
+By addressing the identified routing and congestion issues, and by monitoring the high‑risk clients and servers, the ISP can reduce the frequency and duration of unstable intervals, thereby improving overall QoS for RNP traffic.

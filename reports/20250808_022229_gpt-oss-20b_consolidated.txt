@@ -1,0 +1,83 @@
+## 1. Executive Summary: Capacity vs. Responsiveness  
+
+- **Capacidade (throughput)** — medimos a quantidade de dados que consegue ser entregue em cada direção.  
+- **Responsividade (RTT)** — medimos o tempo que um pacote leva para ir do cliente até o servidor e voltar.  
+
+Ao analisar a rede a partir dessas duas perspectivas, conseguimos separar duas causas de degradação:  
+1. **Throughput** — intervalos curtos, baixa largura‑de‑banda e latência alta indicam **congestão ou roteamento instável**.  
+2. **RTT** — intervalos curtos, RTT elevado e baixa taxa de transferência apontam **problemas de caminho ou de congestionamento de links de subida**.  
+
+O principal achado de cada abordagem foi:  
+- **Throughput** : os clientes **client02** e **client07** e os servidores **rnp_rj** e **rnp_sp** apresentam a maior probabilidade de ficar em regime de risco.  
+- **RTT** : os mesmos clientes **client02** e **client07**, o servidor **rnp_rj** e os clientes **client12** e **client09** são os mais afetados.  
+
+Assim, a análise combinada revela três pontos críticos que aparecem em ambas as métricas: **client02**, **client07** e **rnp_rj**.  
+
+---
+
+## 2. Unified Diagnosis: Onde Estão os Pontos Críticos?  
+
+| Elemento | Problema Detectado | Perspectiva |
+|----------|--------------------|-------------|
+| **client02** | Alta probabilidade de intervalos de risco em throughput e RTT | Ambos |
+| **client07** | Alta probabilidade de intervalos de risco em throughput e RTT | Ambos |
+| **rnp_rj** | Alta probabilidade de intervalos de risco em throughput e RTT | Ambos |
+| **rnp_sp** | Risco alto em throughput, RTT estável | Exclusivo throughput |
+| **client12** | Risco alto em RTT, throughput normal | Exclusivo RTT |
+| **client09** | Risco alto em RTT, throughput normal | Exclusivo RTT |
+
+**Conclusões**  
+- Os três pontos críticos (client02, client07, rnp_rj) são os mais urgentes, pois afetam tanto a entrega de dados quanto a latência.  
+- **rnp_sp** indica um problema de capacidade que não afeta a latência, sugerindo congestionamento de links de subida ou de roteamento interno.  
+- **client12** e **client09** apresentam problemas de latência que não se refletem em throughput, sugerindo gargalos de caminho ou de roteamento de subida.  
+
+---
+
+## 3. Plano de Ação Prioritário  
+
+### Prioridade Alta  
+1. **Asset: client02**  
+   - **Ação 1 (NOC)**: Verificar dashboards de monitoramento do cliente (CPU, memória, uso de banda) e alertas de hardware.  
+   - **Ação 2 (Field Team)**: Executar `traceroute` e `ping` do cliente para **rnp_rj** e **rnp_sp** durante um intervalo de risco para identificar hops com latência alta ou perda de pacotes.  
+   - **Ação 3 (Engineering)**: Revisar políticas de roteamento BGP entre o cliente e os servidores RNP, ajustando preferências se necessário.  
+
+2. **Asset: client07**  
+   - **Ação 1 (NOC)**: Checar métricas de throughput e RTT em todas as rotas (gru03, gru05, gru06, rnp_rj, rnp_sp).  
+   - **Ação 2 (Field Team)**: Realizar `traceroute` para cada servidor mencionado, anotando hops com latência > 50 ms ou perda > 1 %.  
+   - **Ação 3 (Engineering)**: Avaliar se há necessidade de re‑balanceamento de carga ou de criação de rotas alternativas via outros pontos de peering.  
+
+3. **Asset: rnp_rj**  
+   - **Ação 1 (NOC)**: Monitorar a utilização de link de subida e a taxa de pacotes perdidos em tempo real.  
+   - **Ação 2 (Field Team)**: Executar `traceroute` de vários clientes (client02, client07, client12) para rnp_rj, verificando consistência de rotas.  
+   - **Ação 3 (Engineering)**: Conferir políticas de peering e de QoS na borda de rnp_rj, ajustando limites se houver saturação.  
+
+### Prioridade Média  
+4. **Asset: rnp_sp**  
+   - **Ação 1 (NOC)**: Analisar logs de throughput e latência em períodos de risco.  
+   - **Ação 2 (Field Team)**: Realizar `traceroute` de rnp_sp para rnp_ba e outros servidores, identificando possíveis gargalos de roteamento interno.  
+   - **Ação 3 (Engineering)**: Avaliar a necessidade de otimizar rotas internas ou de aumentar a capacidade de links de subida.  
+
+5. **Asset: client12**  
+   - **Ação 1 (NOC)**: Monitorar a carga de rede local e a qualidade de uplink.  
+   - **Ação 2 (Field Team)**: Executar `traceroute` de client12 para rnp_sp durante o período de risco (17–23 Jul).  
+   - **Ação 3 (Engineering)**: Verificar se há mudanças de rota BGP que afetaram o caminho de client12 para rnp_sp.  
+
+6. **Asset: client09**  
+   - **Ação 1 (NOC)**: Confirmar se o cliente apresenta padrões de uso atípicos (picos de upload).  
+   - **Ação 2 (Field Team)**: Realizar `traceroute` e `ping` para todos os servidores RNP, identificando hops com latência elevada.  
+   - **Ação 3 (Engineering)**: Avaliar se o cliente precisa de ajustes de QoS ou de re‑configuração de roteamento.  
+
+### Prioridade Baixa  
+7. **Alertas Automatizados**  
+   - Configurar alertas para RTT > 25 ms ou throughput < 700 Mbps em qualquer caminho crítico, disparando `traceroute` automático.  
+
+8. **Coleta de Métricas Adicionais**  
+   - Incluir métricas de perda de pacotes e jitter nos próximos ciclos de coleta para refinar a definição de clusters.  
+
+9. **Revisão Periódica**  
+   - Agendar revisões trimestrais dos resultados de change‑point e dos clusters, garantindo que novas anomalias sejam detectadas rapidamente.  
+
+---
+
+**Resumo Final**  
+Os pontos críticos identificados (client02, client07, rnp_rj) exigem ações imediatas de diagnóstico de caminho, revisão de políticas BGP e monitoramento de hardware. Problemas exclusivos de throughput (rnp_sp) ou de RTT (client12, client09) devem ser tratados em sequência, mas com menor urgência. A implementação das ações acima reduzirá a frequência e a duração dos intervalos de risco, melhorando a qualidade geral da rede RNP.

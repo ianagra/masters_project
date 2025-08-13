@@ -1,0 +1,23 @@
+# QoS Assessment Report: RTT Upload Approach
+
+## Executive Summary
+The analysis of network performance metrics focusing on RTT upload reveals two distinct clusters representing stable and unstable behavior. Cluster 1, characterized by low risk, exhibits long intervals, high throughput, and low RTT, indicating stable connections. In contrast, Cluster 0, classified as high-risk, shows shorter intervals, lower throughput, higher RTT, and frequent transitions, signaling instability. Key entities such as client09, rnp_rj, client12, client02, and client07 are strongly associated with Cluster 0, highlighting their role in network degradation.
+
+## Detailed Findings
+The study employed change-point detection to segment data into intervals based on RTT upload metrics. These intervals were then characterized by multivariate analysis of throughput and RTT metrics across all clients and servers. Clustering identified two distinct groups: Cluster 1 (stable) and Cluster 0 (unstable). 
+
+- **Cluster 1** demonstrated consistent performance with high throughput (~660 Mbps) and low RTT (~17-20ms), indicating robust connections.
+- **Cluster 0** exhibited lower throughput (~307 Mbps), higher RTT (~96-98ms), and frequent transitions, suggesting instability.
+
+Critical elements identified include:
+- **client09**: Showed high negative coefficients, linked to Cluster 0's instability, with notable RTT spikes during interactions with rnp_rj.
+- **rnp_rj**: A server frequently associated with instability, marked by elevated RTT and degraded throughput.
+- **client12, client02, client07**: These clients exhibited periodic instability, particularly during interactions with rnp_rj.
+
+## Recommended Actions
+- Perform traceroute analysis between critical clients (client09, client12, client02, client07) and servers (rnp_rj, rnp_sp) to identify routing issues.
+- Monitor throughput and RTT variations during high-risk intervals for targeted troubleshooting.
+- Optimize network configurations around identified hotspots to reduce latency and improve stability.
+- Implement proactive monitoring of critical clients and servers to detect early signs of instability.
+
+These steps aim to mitigate network degradation and enhance overall QoS by addressing root causes of instability.

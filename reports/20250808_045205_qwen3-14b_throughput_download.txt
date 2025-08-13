@@ -1,0 +1,41 @@
+# QoS Assessment Report: throughput_download Approach  
+
+## Executive Summary  
+The QoS assessment using the **throughput_download** metric identified **periods of instability** in the network, particularly for **rnp_rj** and its interactions with **client16** and **client14**. While most intervals fell under **Cluster 1** (stable state), certain high-risk intervals exhibited **significant fluctuations in throughput and RTT**, indicating potential **network congestion, routing inefficiencies, or server-side performance bottlenecks**. Key findings include:  
+- **rnp_rj** experienced **high-risk intervals** in late July 2024, with **substantial drops in throughput** and **elevated RTT values**.  
+- **client16** and **client14** showed **consistent anomalies** in their interactions with **rnp_rj**, suggesting **localized network or infrastructure issues**.  
+- **Cluster 1** intervals for **rnp_sp** remained **stable**, but **client14** exhibited **outliers in RTT metrics**, warranting further investigation.  
+
+## Detailed Findings  
+### 1. **Cluster Analysis**  
+- **Cluster 1** (stable state) dominated the dataset, with **70% of intervals** falling under this category. However, **30% of intervals** (particularly in **rnp_rj** and **client14** interactions) showed **unstable performance**.  
+- **rnp_rj** experienced **high-risk intervals** between **July 6 and July 22, 2024**, with **throughput_download** dropping by **30-40%** and **RTT** increasing by **15-25%** compared to stable intervals.  
+
+### 2. **Critical Interactions**  
+- **rnp_rj** and **client16**:  
+  - **July 19–22, 2024**: **throughput_download** dropped to **<50% of baseline**, with **RTT_download_mean** increasing to **15.51 ms** (vs. **10.2 ms** in stable intervals).  
+  - **Potential cause**: **Network congestion or routing inefficiencies** between **rnp_rj** and **client16**.  
+- **rnp_rj** and **client14**:  
+  - **July 6–17, 2024**: **RTT_upload_mean** spiked to **13.04 ms** (vs. **10.8 ms** in stable intervals).  
+  - **Potential cause**: **Hardware or link issues** on **rnp_rj** or **client14**.  
+
+### 3. **Stability in rnp_sp**  
+- **rnp_sp** showed **consistent stability** across all intervals, with **throughput_download** and **RTT** metrics within **normal ranges**.  
+- **client14** interactions with **rnp_sp** had **outliers** in **RTT** (e.g., **RTT_download_std = 0.96**), suggesting **localized anomalies**.  
+
+## Recommended Actions  
+- **Investigate Network Paths**:  
+  - Use **traceroute** or **ping** tools to analyze **latency and packet loss** between **rnp_rj** and **client16**/**client14**.  
+  - Check for **suboptimal routing** or **congestion** in the **rnp_rj region**.  
+- **Monitor Server Performance**:  
+  - Conduct **resource utilization analysis** (CPU, memory, disk I/O) on **rnp_rj** during **high-risk intervals**.  
+  - Validate **QoS policies** and **bandwidth allocation** for traffic to **rnp_rj**.  
+- **Analyze Logs and Configuration Changes**:  
+  - Correlate **July 2024** performance data with **system logs** to identify **configuration changes** that improved stability.  
+  - Review **client14** logs for **hardware or software anomalies** causing **RTT variability**.  
+- **Implement Redundancy and Load Balancing**:  
+  - For **rnp_rj**, consider **redundant links** or **load balancing** to mitigate **single points of failure**.  
+  - Monitor **RTT variability** in **rnp_sp** and **client14** for **early detection** of anomalies.  
+
+---  
+**Next Steps**: Prioritize troubleshooting **rnp_rj** and **client16**/**client14** interactions, followed by **long-term monitoring** of **RTT variability** in **rnp_sp**.

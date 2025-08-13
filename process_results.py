@@ -219,6 +219,91 @@ def compute_clusters_stats(df_surv: pd.DataFrame, model):
         if col not in df_surv.columns:
             raise ValueError(f"A coluna '{col}' está faltando no DataFrame de sobrevivência (df_surv).")
     
+    # Lista para armazenar estatísticas de cada cluster
+    cluster_stats_list = []
+    
+    # Iterar sobre cada cluster único
+    unique_clusters = df_surv['cluster'].unique()
+    print(f"Processando {len(unique_clusters)} clusters...")
+    
+    for cluster_id in unique_clusters:
+        print(f"\nProcessando cluster {cluster_id}...")
+        
+        # Filtrar dados do cluster atual
+        cluster_data = df_surv[df_surv['cluster'] == cluster_id]
+        
+        # Calcular estatísticas de tempo e eventos
+        time_stats = {
+            'cluster': cluster_id,
+            'interval_count': len(cluster_data),
+            'time_mean': cluster_data['time'].mean(),
+            'time_median': cluster_data['time'].median(),
+            'time_std': cluster_data['time'].std(),
+            'event_frequency': cluster_data['event'].sum() / len(cluster_data),
+            'throughput_download_mean': cluster_data['throughput_download_mean'].mean(),
+            'throughput_download_median': cluster_data['throughput_download_mean'].median(),
+            'throughput_download_std': cluster_data['throughput_download_mean'].std(),
+            'throughput_uplosad_mean': cluster_data['throughput_upload_mean'].mean(),
+            'throughput_upload_median': cluster_data['throughput_upload_mean'].median(),
+            'throughput_upload_std': cluster_data['throughput_upload_mean'].std(),
+            'rtt_download_mean': cluster_data['rtt_download_mean'].mean(),
+            'rtt_download_median': cluster_data['rtt_download_mean'].median(),
+            'rtt_download_std': cluster_data['rtt_download_mean'].std(),
+            'rtt_upload_mean': cluster_data['rtt_upload_mean'].mean(),
+            'rtt_upload_median': cluster_data['rtt_upload_mean'].median(),
+            'rtt_upload_std': cluster_data['rtt_upload_mean'].std(),
+        }
+        
+        # Adicionar função de sobrevivência
+        kmf = model.kmfs[cluster_id]['kmf']
+        surv_fcn_df = kmf.survival_function_.reset_index()
+        surv_fcn_df.columns = ['time', 'survival_probability']
+        
+        # Definir tempos fixos para interpolação
+        fixed_times = [1, 7, 15, 30, 60, 90]
+        
+        # Interpolar valores da função de sobrevivência nos tempos fixos
+        interpolated_probs = np.interp(
+            fixed_times, 
+            surv_fcn_df['time'].values, 
+            surv_fcn_df['survival_probability'].values
+        )
+        
+        # Criar lista de pontos [tempo, probabilidade] para os tempos fixos
+        survival_function = []
+        for i in range(len(fixed_times)):
+            point = {
+                'time_days': fixed_times[i],
+                'survival_probability': round(interpolated_probs[i], 3)
+            }
+            survival_function.append(point)
+        
+        time_stats['survival_function'] = survival_function
+        
+        cluster_stats_list.append(time_stats)
+    
+    # Criar DataFrame final
+    result_df = pd.DataFrame(cluster_stats_list)
+        
+    return result_df
+
+def compute_clusters_stats_ts(df_surv: pd.DataFrame, model):
+    """
+    Cria um dataframe com as estatísticas descritivas de cada cluster.
+    
+    Args:
+        df_surv (pd.DataFrame): DataFrame com os intervalos. Deve conter as 
+            colunas 'timestamp_start', 'timestamp_end', 'time', 'event', 'cluster', 'client', 'site'.
+    
+    Returns:
+        pd.DataFrame: DataFrame com estatísticas descritivas para cada cluster.
+    """
+    # Validação e Preparação
+    required_cols = ['timestamp_start', 'timestamp_end', 'time', 'event', 'cluster', 'client', 'site']
+    for col in required_cols:
+        if col not in df_surv.columns:
+            raise ValueError(f"A coluna '{col}' está faltando no DataFrame de sobrevivência (df_surv).")
+    
     metrics = ['throughput_download', 'throughput_upload', 'rtt_download', 'rtt_upload']
     time_series_path = 'datasets/ts_ndt_cp'
     

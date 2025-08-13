@@ -1,0 +1,86 @@
+## 1. Resumo Executivo: Capacidade vs. Responsividade
+
+- Por que duas visões?
+  - Throughput (download): mede a “capacidade de entrega” da rede. Detecta quedas de banda, tetos artificiais e instabilidades no plano de dados.
+  - RTT (upload): mede a “responsividade” da conexão. Capta aumentos de latência, jitter e sintomas de fila/congestionamento que degradam a experiência mesmo com banda alta.
+
+- Principais achados por abordagem
+  - Throughput (download): identificou um cluster de alto risco com períodos curtos, alta frequência de eventos, throughput baixo/instável e RTT mais alto. Destaques:
+    - Degradações coordenadas em meados de julho (17–23/07) no download para rnp_rj e rnp_sp, atingindo vários clientes, com upload e RTT estáveis — padrão consistente com limitação/capacidade no caminho de download próximo aos servidores ou peering.
+    - client07 tornou-se instável para rnp_rj/rnp_sp a partir de meados de junho (alta variância de download com RTT normal).
+    - client02 apresentou predominância de instabilidade, com alta variabilidade de download para gru05 (05/11–15/07).
+  - RTT (upload): separou estados de operação com alta vs baixa responsividade. O cluster de risco tem RTT alto (≳100 ms) e throughput baixo/volátil. Destaques:
+    - Impairment recorrente para gru03 (client09, client12, client07) com pico severo de RTT e colapso de throughput em 28/06–01/07; após 09/07, RTT normaliza, mas alguns casos ficam com download instável.
+    - Instabilidade específica entre client01/client02 e rnp_rj em maio–junho.
+    - Início tardio de instabilidade de download para rnp_sp (client07) a partir de 16/07, com RTT baixo.
+
+## 2. Diagnóstico Unificado: Onde Estão os Pontos Críticos?
+
+- Convergências (prioridade máxima: aparecem em ambas as análises)
+  - Servidor rnp_rj:
+    - Throughput: queda coordenada de download em 17–23/07 (clientes 07, 08, 09, 13, 14, 16), com upload/RTT estáveis.
+    - RTT: janelas de instabilidade em maio–junho específicas a client01/client02; flutuação curta em 11–18/07. Indica problemas por caminho/rota e, em julho, possível limitação no plano de download próximo ao servidor/peering.
+  - Servidor rnp_sp:
+    - Throughput: “teto” de download em 17–23/07 (clientes 08, 12, 13, 14, 16), com upload alto e RTT majoritariamente normal.
+    - RTT: instabilidade curta em client07 e client12 em meados de julho, coerente com problema de throughput com RTT baixo.
+  - Servidor/rota gru03:
+    - RTT: problema recorrente multi-cliente (09, 12, 07) com RTT muito alto e throughput colapsado em 28/06–01/07; após 09/07, RTT normaliza e persiste instabilidade de download em alguns casos.
+    - Throughput: registro de RTT alto para client07 até 09/07, seguido de normalização (coerente com o quadro acima).
+  - client07:
+    - Throughput: instabilidade de download para rnp_rj/rnp_sp desde meados de junho/julho com RTT normal.
+    - RTT: degradação severa para gru03 em 28/06–01/07; após 09/07 a latência normaliza, mas o download segue instável; início de instabilidade de download para rnp_sp em 16/07.
+  - client02:
+    - Throughput: predominância de intervalos de risco; alta variabilidade de download para gru05 (05/11–15/07).
+    - RTT: instabilidade específica para rnp_rj em 05/08–06/15 (RTT_u alto/variável e download com queda/variância).
+  - client09 e client12:
+    - RTT: ambos críticos para gru03 (pico 28/06–01/07; melhora após 09/07).
+    - Throughput: ambos aparecem entre os afetados nas quedas de download de meados de julho (rnp_rj e/ou rnp_sp), reforçando que houve mais de um fenômeno por caminho.
+
+- Achados exclusivos (verificar, mas com menor prioridade)
+  - client01 → rnp_rj (maio–junho) aparece somente na análise de RTT (upload).
+  - client04 → rnp_rj teve aumento de RTT em 26/06 sem perda de throughput (indício de mudança de rota), citado na análise de throughput.
+
+- Interpretação operacional
+  - Há dois fenômenos principais:
+    1) Evento de julho no plano de download próximo a rnp_rj/rnp_sp (multi-cliente, RTT e upload normais).
+    2) Problema de responsividade (RTT) para gru03 no fim de junho/início de julho com posterior normalização parcial.
+  - Além disso, há problemas por caminho específicos (client02↔rnp_rj em maio–junho; client02↔gru05 por longo período).
+
+## 3. Plano de Ação Prioritário
+
+- Prioridade Alta
+  - Ativo: rnp_rj e rnp_sp (evento de download em 17–23/07)
+    - Ação (NOC): inspecionar imediatamente counters de interfaces de saída/entrada dos servidores e vizinhanças (drops, discards, erros, ocupação de filas, AQM), taxa de utilização e mudanças de configuração entre 15–23/07. Checar se houve “teto” de download (~175–230 Mbps) por shaping/policing.
+    - Ação (Campo/Testes): executar traceroute/MTR bidirecional e testes NDT/iperf3 em horários comparáveis a partir dos clientes afetados (07, 08, 09, 12, 13, 14, 16) para rnp_rj e rnp_sp; incluir um destino controle saudável (ex.: gru06). Coletar perda/retransmissões TCP e boa vazão por fluxo.
+    - Ação (Engenharia): revisar rotas/BGP e enlaces de peering adjacentes a RNP-RJ e RNP-SP no período; validar capacidade e filas; se houver indício de limitação no lado RNP/peering, abrir tratativa com RNP anexando evidências de tempo e clientes.
+  - Ativo: gru03 (pico de RTT 28/06–01/07 e efeitos residuais após 09/07)
+    - Ação (NOC): revisar histórico de CPU/NIC, filas e perdas nos intervalos 28/06–01/07 e após 09/07; checar eventos/maintenance e alterações de QoS/AQM.
+    - Ação (Campo/Testes): rodar traceroute/MTR bidirecional e medições OWAMP/TWAMP entre client07, client09, client12 e gru03 (pico e entrepico); paralelamente, testar contra um controle (gru06) para isolar degradação específica do destino; executar iperf3 nos dois sentidos para confirmar se a queda é só no download.
+    - Ação (Engenharia): comparar caminhos antes/depois de 09/07; verificar assimetria de rotas e políticas de enfileiramento; ajustar se necessário e, se for externo, escalar para o parceiro.
+  - Ativo: client07 (instabilidade persistente)
+    - Ação (Campo): auditar equipamentos de acesso/agregação (erros de interface, quedas, oversubscription); confirmar ausência de novos policers/shapers aplicados a partir de meados de junho.
+    - Ação (Testes): repetir sessões longas de NDT/iperf3 para rnp_rj e rnp_sp; capturar pcap ou métricas de TCP (retransmissões, janela, perda). Se houver perda com RTT baixo, investigar camada 2 (erros físicos) e filas locais.
+
+- Prioridade Média
+  - Ativo: client02
+    - Ação (Campo/Testes): verificar o caminho para rnp_rj (05/08–06/15) — repetir traceroute/MTR e testes comparando com período atual; checar se RTT_u permanece acima do baseline.
+    - Ação (NOC): analisar counters nas interfaces que atendem client02↔rnp_rj nesse intervalo histórico e hoje.
+    - Ação (Campo/Testes): investigar a variabilidade de download para gru05 (05/11–15/07) — medir com controle (ex.: rnp_sp) para isolar problema de caminho.
+  - Ativo: client09 e client12
+    - Ação (Campo/Testes): confirmar que, após 09/07, o RTT para gru03 permaneceu normal e que não restou instabilidade de download; se houver, coletar evidências (iperf3 direcional, perda, MTR).
+    - Ação (NOC): revalidar se os episódios de 17–23/07 para rnp_rj/rnp_sp já não ocorrem; se reincidir, correlacionar com utilização de links e filas.
+  - Ativo: Rotas e políticas
+    - Ação (Engenharia): revisar mudanças de BGP/IGP e políticas de QoS/shaping/AQM envolvendo gru03 (28/06–09/07), rnp_rj (maio–junho e 11–18/07) e rnp_sp (a partir de 16/07). Documentar e manter trilha de auditoria.
+  - Monitoramento (reforço)
+    - Ação (NOC): criar alertas para “queda sincronizada de download” multi-cliente para rnp_rj/rnp_sp com upload/RTT normais; spikes de RTT_u (>2× baseline) para gru03; aumento abrupto de variância de download com RTT estável.
+
+- Prioridade Baixa
+  - Ativo: client01 → rnp_rj (maio–junho)
+    - Ação (Campo/Testes): rodada de verificação (traceroute/MTR e NDT) para confirmar ausência de recorrência; comparar com clientes vizinhos.
+  - Ativo: client04 → rnp_rj (26/06)
+    - Ação (Engenharia): registrar a mudança de rota que elevou o RTT sem impacto em throughput; manter como baseline de referência.
+  - Processo
+    - Ação (NOC/Engenharia): consolidar timeline de eventos e mudanças (BGP/IGP, peering, QoS/AQM) e atrelar às janelas detectadas nas medições para futuras correlações.
+    - Ação (NOC): agendar checagens mensais proativas de saúde de caminhos críticos (gru03, rnp_rj, rnp_sp) com testes direcional e controle.
+
+Observação final: onde as duas abordagens concordam (mesmos clientes/servidores e janelas), trate como prioridade máxima. Onde apenas uma abordagem indicou problema, valide rapidamente com testes direcionados antes de escalar.
