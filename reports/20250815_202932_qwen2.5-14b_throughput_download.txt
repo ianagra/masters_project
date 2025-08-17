@@ -1,0 +1,51 @@
+## QoS Assessment Report: throughput_download Approach
+
+### Executive Summary
+
+This report presents a comprehensive analysis of Quality of Service (QoS) issues detected through the change-point detection and clustering methodologies applied to Network Diagnostic Tool (NDT) data collected from 16 Raspberry Pi devices targeting RNP servers. The analysis identifies critical clients and servers, as well as key performance metrics that significantly influence network stability. Key findings indicate that high Round-Trip Time (RTT) values are strongly associated with unstable network conditions, while consistent lower RTTs correlate with stable intervals. Recommendations for further investigation and mitigation strategies are provided to enhance network reliability.
+
+### Detailed Findings
+
+#### Critical Clients
+The analysis has identified the following clients as critical due to their frequent interactions during high-risk periods:
+- **Client 02**
+- **Client 07**
+- **Client 13**
+
+These clients exhibit significant variability in performance metrics, with notable drops in throughput and elevated RTT values during specific intervals.
+
+#### Critical Servers
+The server `rnp_rj` stands out as a critical node due to its frequent interactions with multiple clients during degraded periods:
+- **Server rnp_rj**
+  - Interactions with `client15` and `client16` are particularly noteworthy for their high variability in performance metrics.
+
+#### Key Performance Metrics
+The following metrics have the greatest impact on network stability, based on their strong correlation with both stable and unstable intervals:
+
+- **Round-Trip Time (RTT):** High RTT values consistently correlate with periods of degraded performance. Elevated RTTs indicate potential routing inefficiencies or network congestion.
+
+- **Throughput:** Significant fluctuations in throughput are observed during unstable periods, suggesting issues such as bandwidth limitations or packet loss.
+
+### Recommended Actions
+
+1. **Traceroute Analysis:**
+   - Conduct traceroute analyses from critical clients (`client02`, `client07`, and `client13`) to the server `rnp_rj` during both stable and degraded intervals.
+   - Identify problematic network hops that may be introducing delays or causing packet loss.
+
+2. **Routing Optimization:**
+   - Based on traceroute results, optimize routing configurations for clients experiencing high RTT values when interacting with `rnp_rj`.
+   - Consider alternative routes to mitigate latency issues and improve overall performance.
+
+3. **Bandwidth Monitoring:**
+   - Implement continuous monitoring of throughput between critical client-server pairs.
+   - Adjust bandwidth allocation or upgrade network infrastructure if necessary to ensure consistent service levels during peak usage periods.
+
+4. **Network Configuration Review:**
+   - Perform a detailed review of the network configurations for both clients and servers involved in degraded performance intervals.
+   - Identify any misconfigurations that may be contributing to instability and correct them promptly.
+
+5. **Performance Baseline Establishment:**
+   - Establish baseline performance metrics for critical client-server pairs during stable periods.
+   - Use these baselines as reference points to quickly identify deviations indicative of potential issues.
+
+By addressing the identified routing inefficiencies, optimizing network configurations, and continuously monitoring key performance indicators, it is anticipated that significant improvements in QoS can be achieved. These actions will help mitigate instability and enhance overall network reliability for critical client-server interactions.

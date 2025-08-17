@@ -1,0 +1,36 @@
+# QoS Assessment Report: Throughput Download Approach
+
+## 1. Executive Summary
+This report evaluates network performance using the throughput download approach, focusing on quality of service (QoS) metrics such as throughput and round-trip time (RTT). The analysis identifies two clusters of intervals: Cluster 0 (high-risk, unstable) and Cluster 1 (low-risk, stable). Key findings include:
+- **Critical Metrics**: RTT values, particularly download mean and standard deviation, significantly influence cluster assignment.
+- **Critical Clients**: Client02, Client07, and Client13 exhibit the strongest association with instability.
+- **Critical Server**: The server `rnp_rj` is most strongly linked to high-risk behavior.
+
+## 2. Detailed Findings
+
+### Cluster Analysis
+- **Cluster 0 (High-Risk)**: Characterized by shorter intervals, higher RTT, and lower throughput, indicating network instability.
+- **Cluster 1 (Low-Risk)**: Shows longer intervals, lower RTT, and higher throughput, reflecting stable performance.
+
+### Critical Clients
+- **Client02**: Strongest association with Cluster 0 due to high negative coefficient (-1.95).
+- **Client07**: Second strongest association (-1.73), indicating significant instability.
+- **Client13**: Moderate association (-0.61), showing notable but less pronounced instability.
+
+### Critical Servers
+- **Server `rnp_rj`**: Strongest association with Cluster 0 (-1.3675), suggesting frequent network issues during interactions.
+
+### Influential Metrics
+- **RTT Download Mean and Std**: Most impactful metrics, as higher values strongly indicate instability.
+- **Throughput Variability**: Lower throughput in Cluster 0 suggests congestion or degradation.
+
+## 3. Recommended Actions
+
+- **Investigate Network Path to `rnp_rj`**: Conduct traceroute analysis for clients (Client02, Client07, Client13) to identify routing issues or bottlenecks.
+- **Monitor RTT and Throughput**: Implement continuous monitoring of download RTT and throughput metrics for early detection of instability.
+- **Analyze Packet Loss**: Investigate packet loss patterns during high-risk intervals to identify potential network hardware or configuration problems.
+- **Optimize Network Configuration**: Adjust routing policies or upgrade hardware if issues like increased latency or packet loss are detected.
+
+---
+
+This report provides actionable insights to address QoS challenges, focusing on critical clients and servers identified through the throughput download approach. By addressing these findings, network performance can be significantly improved.

@@ -1,0 +1,68 @@
+### 1. Resumo Executivo: Capacidade vs. Responsividade
+
+Analisamos a rede sob duas perspectivas para entender dois aspectos fundamentais:  
+- **Capacidade de entrega** (medida por *throughput*): Refere-se à quantidade de dados que o sistema consegue transmitir por segundo. Problemas aqui indicam congestionamento ou limitações de recursos.  
+- **Responsividade da conexão** (medida por *RTT*): Refere-se ao tempo que um pacote leva para ir da origem ao destino e voltar. Problemas aqui apontam para latência excessiva ou instabilidades na rota.  
+
+**Principais achados:**  
+- **Throughput_download**: Instabilidade intermitente, com 50–70% de quedas em *throughput* e aumento de 25% em *RTT* em intervalos críticos. Clientes como **Client13** e servidores **rnp_rj** e **rnp_sp** são os mais afetados.  
+- **RTT_upload**: 94,1% dos intervalos estão em Cluster 1 (instáveis), com **Client16** sendo o principal contribuinte devido a variações extremas em *upload throughput* e *RTT*.  
+
+---
+
+### 2. Diagnóstico Unificado: Onde Estão os Pontos Críticos?
+
+#### **Clientes com Desempenho Crítico**  
+- **Client13**: Identificado apenas no *throughput_download* (5 intervalos críticos com **rnp_rj** e **rnp_sp**).  
+- **Client16**: Identificado apenas no *RTT_upload* (3 intervalos críticos com alta variabilidade em *upload throughput* e *RTT*).  
+- **Client14**: Presente em ambos os relatórios, com comportamento variável (transições entre Cluster 0 e Cluster 1).  
+
+#### **Servidores com Desempenho Crítico**  
+- **rnp_rj** e **rnp_sp**: Críticos apenas no *throughput_download*, com quedas de 50–70% em *throughput* e aumento de 25% em *RTT*.  
+- **rtt_upload Server**: Crítico apenas no *RTT_upload*, com 16/17 intervalos em Cluster 1 (instáveis).  
+
+#### **Principais Métricas Impactando a Qualidade do Serviço**  
+1. **Throughput_download**: Quedas de 50–70% em intervalos críticos (ex: **Client13** com **rnp_rj**). Indica congestionamento ou competição por recursos.  
+2. **RTT_download**: Aumento de 25% em intervalos críticos (ex: **rnp_rj** com 22,42 ms vs. 19,87 ms em intervalos estáveis). Sinaliza latência excessiva.  
+3. **Upload Throughput Std** (Client16): Variabilidade de 132,82 Mbps. Indica instabilidade no envio de dados.  
+4. **Upload RTT Std** (Client16): Variabilidade de 10,21 ms. Sinaliza flutuações de latência.  
+
+#### **Bottlenecks Consistentes (Prioridade Alta)**  
+- **rnp_rj** e **rnp_sp**: Presentes apenas no *throughput_download*, mas com impacto significativo (quedas de *throughput* e aumento de *RTT*).  
+- **rtt_upload Server**: Presente apenas no *RTT_upload*, com 94,1% dos intervalos instáveis.  
+
+#### **Problemas Exclusivos a Cada Abordagem**  
+- **Throughput_download**: Problemas em servidores **rnp_rj** e **rnp_sp** sugerem possíveis falhas de roteamento, congestionamento ou hardware.  
+- **RTT_upload**: Problemas em **Client16** indicam possíveis falhas no lado do cliente (hardware, configuração ou uso de aplicações).  
+
+---
+
+### 3. Plano de Ações Prioritário  
+
+#### **Prioridade Alta**  
+- **Ativo**: Servidor **rnp_rj** (crítico no *throughput_download*).  
+  - **Ação 1 (NOC)**: Verificar dashboards de monitoramento para alertas de hardware (CPU, memória) e saturação de links.  
+  - **Ação 2 (Equipe de Campo)**: Executar `traceroute` de **Client13** para **rnp_rj** para identificar hops com latência alta.  
+  - **Ação 3 (Engenharia)**: Enviar para a equipe de Engenharia de Rede para revisão de políticas de roteamento e acordos de peering com RNP.  
+
+- **Ativo**: Servidor **rtt_upload Server** (crítico no *RTT_upload*).  
+  - **Ação 1 (NOC)**: Analisar logs do servidor para identificar falhas de hardware, CPU, memória ou disco.  
+  - **Ação 2 (Equipe de Campo)**: Testar latência e perda de pacotes entre **Client16** e o servidor.  
+  - **Ação 3 (Engenharia)**: Revisar configurações de QoS para priorizar tráfego crítico (ex: **Client16**).  
+
+#### **Prioridade Média**  
+- **Ativo**: Cliente **Client14** (presente em ambos os relatórios).  
+  - **Ação 1 (NOC)**: Monitorar métricas de *throughput* e *RTT* para **Client14** em intervalos críticos.  
+  - **Ação 2 (Equipe de Campo)**: Verificar configurações de rede e hardware do cliente.  
+
+- **Ativo**: Cliente **Client16** (crítico no *RTT_upload*).  
+  - **Ação 1 (NOC)**: Analisar padrões de uso de aplicações no cliente.  
+  - **Ação 2 (Equipe de Campo)**: Testar conexões alternativas (ex: redes móveis) para identificar falhas específicas.  
+
+#### **Prioridade Baixa**  
+- **Ativo**: Servidor **rnp_sp** (crítico no *throughput_download*).  
+  - **Ação 1 (NOC)**: Revisar logs de monitoramento para identificar padrões de uso e congestionamento.  
+  - **Ação 2 (Engenharia)**: Avaliar a necessidade de expansão de capacidade ou otimização de rotas.  
+
+- **Ativo**: Cliente **Client12** (não crítico, mas mencionado em testes).  
+  - **Ação 1 (Equipe de Campo)**: Realizar testes de conectividade e latência como parte de uma verificação preventiva.

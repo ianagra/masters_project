@@ -1,0 +1,63 @@
+## Relatório Operacional Consolidado: Análise de Qualidade do Serviço (QoS) em Redes
+
+### 1. Resumo Executivo: Capacidade vs. Responsividade
+
+A análise da qualidade do serviço (QoS) nas redes é fundamental para garantir que os usuários finais tenham uma experiência de conexão confiável e eficiente. Nesta avaliação, utilizamos duas abordagens diferentes para medir a estabilidade da rede: a capacidade de entrega (download throughput) e a responsividade da conexão (upload RTT).
+
+- **Capacidade de Entrega**: Esta análise foca na quantidade de dados que pode ser transferida em um determinado período, indicando se o servidor está capaz de fornecer largura de banda suficiente para os usuários.
+- **Responsividade da Conexão**: Essa abordagem mede a latência e a consistência do tempo de resposta entre o cliente e o servidor, identificando problemas potenciais de congestionamento ou roteamento ineficiente.
+
+### 2. Diagnóstico Unificado: Onde Estão os Pontos Críticos?
+
+#### Clientes com Desempenho Crítico
+
+- **Cliente02**: Identificado em ambas as abordagens, indicando problemas persistentes.
+- **Cliente07** e **Cliente13**: Apenas na abordagem de throughput download.
+- **Cliente09** e **Cliente12**: Somente na análise baseada em upload RTT.
+
+#### Servidores com Desempenho Crítico
+
+- **Servidor rnp_rj**: Identificado como crítico em ambas as análises, sugerindo problemas generalizados de roteamento ou congestionamento.
+- **Servidor gru03** (não mencionado nas abordagens específicas): Problemas exclusivos identificados na análise de RTT upload.
+
+#### Métricas Principais Impactantes
+
+- **RTT (Round Trip Time)**: Altos valores indicam potenciais problemas de roteamento ou congestionamento.
+- **Throughput**: Flutuações significativas no throughput são associadas a períodos de instabilidade, sugerindo limitações de largura de banda ou perda de pacotes.
+
+#### Pontos Críticos Consistentes
+
+Os clientes e servidores identificados em ambas as abordagens (Cliente02, rnp_rj) devem ser priorizados para intervenções imediats. Estes elementos indicam problemas sistêmicos que afetam a capacidade de entrega e a responsividade da conexão.
+
+#### Problemas Exclusivos
+
+Problemas identificados apenas na análise baseada em RTT upload (Cliente09, Cliente12) podem sugerir desafios específicos relacionados à latência ou roteamento durante o envio de dados para servidores remotos. Estes devem ser investigados separadamente.
+
+### 3. Plano de Ação Priorizado
+
+#### Ações de Alta Prioridade
+
+- **Ativo: Servidor rnp_rj**
+    - **Ação 1 (NOC)**: Verificar os painéis de monitoramento do servidor para alertas de hardware (CPU, memória) e saturação de links.
+    - **Ação 2 (Equipe de Campo)**: Executar um `traceroute` a partir de clientes problemáticos (e.g., Cliente02) ao servidor rnp_rj para mapear o caminho e identificar hops com alta latência.
+    - **Ação 3 (Engenharia)**: Escalas à equipe de Engenharia de Rede para revisar as políticas de roteamento e acordos de peering com RNP nesta localização.
+
+- **Ativo: Cliente02**
+    - **Ação 1 (NOC)**: Monitorar continuamente o desempenho do cliente durante períodos de alta demanda.
+    - **Ação 2 (Equipe de Campo)**: Executar um `traceroute` para identificar possíveis problemas no roteamento ou congestionamento.
+
+#### Ações de Média Prioridade
+
+- **Ativo: Cliente09**
+    - **Ação 1 (NOC)**: Monitorar RTT e variabilidade do throughput durante períodos de instabilidade.
+    - **Ação 2 (Equipe de Campo)**: Executar um `traceroute` para identificar possíveis problemas no roteamento ou congestionamento.
+
+#### Ações de Baixa Prioridade
+
+- **Ativo: Cliente13**
+    - **Ação 1 (NOC)**: Monitorar RTT e variabilidade do throughput durante períodos de instabilidade.
+    - **Ação 2 (Equipe de Campo)**: Executar um `traceroute` para identificar possíveis problemas no roteamento ou congestionamento.
+
+---
+
+Este relatório fornece uma visão abrangente dos pontos críticos e ações necessárias para melhorar a qualidade do serviço nas redes. A implementação dessas recomendações ajudará a mitigar instabilidades e melhorar a confiabilidade geral da rede.

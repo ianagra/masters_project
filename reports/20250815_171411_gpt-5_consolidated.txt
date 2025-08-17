@@ -1,0 +1,91 @@
+## 1. Resumo Executivo: Capacidade vs. Resposta
+
+- Por que duas visões:
+  - Capacidade (throughput): mede quão rápido conseguimos “entregar” dados. Quedas sustentadas ou grande variação de throughput sinalizam gargalo de banda, congestionamento ou controle de tráfego.
+  - Resposta (RTT): mede quão “reativa” está a conexão. Aumento de RTT e, principalmente, de sua variação (jitter) indicam fila/congestionamento no caminho, rotas subótimas ou instabilidade de enlace.
+
+- Principais achados por abordagem:
+  - Throughput (download): os períodos de risco (Cluster 0) combinam throughput mais baixo e RTT mais alto, sendo a instabilidade puxada sobretudo por RTT de download elevado e com alto jitter. Elementos críticos: cliente client02 (persistente) e o servidor rnp_rj (janela de degradação de meados de junho a fim de julho).
+  - RTT (upload): os períodos de risco também exibem throughput bem degradado e RTT alto. Os maiores gatilhos de instabilidade são jitter de RTT de download e o próprio RTT de download alto; por outro lado, throughput de download alto protege a estabilidade. Elementos críticos: clientes client09 e client12 (degradação para gru03, com evento severo no fim de junho), além de client02 para rnp_rj; servidor rnp_rj volta a aparecer como ponto de atenção.
+
+## 2. Diagnóstico Unificado: Onde Estão os Pontos Críticos?
+
+- Clientes críticos
+  - Em ambas as análises (prioridade máxima):
+    - client02: instabilidade concentrada ao destino rnp_rj (maio–junho; no throughput também há instabilidade para rnp_sp). É o cliente mais consistente entre as duas visões.
+  - Apenas na análise de throughput:
+    - client07: instável para gru03 até 2024-07-17; a partir de meados de junho, episódios para rnp_sp e rnp_rj (volatilidade de throughput e aumento de jitter de RTT de download).
+    - client13: instável para gru03 até 2024-07-09; em meados de julho, episódios para rnp_rj/rnp_sp com throughput de download deprimido mesmo com RTT baixo.
+  - Apenas na análise de RTT:
+    - client09: instável exclusivamente para gru03 (oito intervalos), com pico severo no fim de junho (queda de throughput e RTT muito alto).
+    - client12: instabilidade prolongada para gru03 (2024-05-06 a 2024-07-09); episódios curtos para gru05 (2024-07-08 a 2024-07-14) e rnp_sp (2024-07-07 a 2024-07-17).
+    - Observação via perspectiva do servidor: client01 também apresentou janelas problemáticas para rnp_rj (maio e meados de julho).
+
+- Servidores/locais críticos
+  - Em ambas as análises (prioridade máxima):
+    - rnp_rj: reaparece nas duas visões. No throughput, há degradação multi-cliente de meados de junho a fim de julho e um problema persistente com client02; no RTT, problemas concentrados em client01 e client02, com janelas em maio–junho e meados de julho.
+  - Evidências em ambas (por múltiplos clientes), mas de forma seletiva:
+    - gru03: no throughput, RTT alto/jitter para client07 e client13 até início/meados de julho; no RTT, degradações fortes e prolongadas para client09 e client12 (inclui evento severo no fim de junho). Indica potencial gargalo/filas no caminho/PoP do gru03 em determinados períodos.
+  - Evidências pontuais:
+    - rnp_sp: episódios em clientes específicos (client07 e client02 no throughput; client12 no RTT). Menos consistente que rnp_rj/gru03, mas merece verificação.
+
+- Métricas com maior impacto na qualidade
+  - Jitter de RTT de download (rtt_download_std): principal indicador de risco nas duas análises. Aumento do jitter está fortemente associado aos períodos instáveis, apontando para filas/congestionamento intermitente no caminho de download.
+  - RTT de download (rtt_download_mean): quanto mais alto, maior a chance de instabilidade. Complementa o jitter como sinal de latência de fila/rota subótima.
+  - Throughput de download (throughput_download_mean): mais alto tende a estabilidade (especialmente claro na análise de RTT). Quedas sustentadas do throughput reforçam o diagnóstico de congestionamento/limitação de capacidade.
+  - Observações secundárias:
+    - Alguns indicadores de “variabilidade de upload” apareceram mais altos em períodos estáveis nesta amostra (rtt_upload_std e throughput_upload_std). Não são gatilhos primários e não direcionam ação por si sós.
+
+- Gargalos consistentes (prioridade máxima)
+  - Cliente: client02 (recorrente nas duas frentes, foco em rnp_rj).
+  - Servidor/PoP: rnp_rj (aparece nas duas frentes).
+  - Métrica-sinal: jitter e média do RTT de download (principais direcionadores de risco).
+
+- Questões exclusivas por abordagem (o que podem indicar)
+  - Exclusivas do throughput: client07 e client13 tiveram fases de risco mesmo com RTT baixo para alguns destinos, sugerindo que variação/queda de throughput também está pesando (ex.: rnp_sp e rnp_rj em meados de junho/julho).
+  - Exclusivas do RTT: client09 e client12 contra gru03 apontam para degradação de latência/jitter e colapso de throughput em janelas específicas (especialmente fim de junho), típico de congestionamento localizado ou mudança de rota desfavorável.
+
+## 3. Plano de Ação Priorizado
+
+Alta prioridade (atuar imediatamente)
+- Ativo: Servidor/PoP rnp_rj (crítico nas duas análises)
+  - Ação 1 (NOC): Verificar imediatamente dashboards e contadores do rnp_rj e enlaces adjacentes nas janelas 2024-06-12 a 2024-07-23 e 2024-05-07 a 2024-06-15 (utilização de interface, filas, drops, CPU).
+  - Ação 2 (Field): Executar traceroute/Paris-traceroute e MTR bidirecionais entre rnp_rj e os clientes afetados (client02 e client01). Rodar em horários de pico e de vale para comparar o aumento de RTT/jitter por salto.
+  - Ação 3 (Engenharia): Revisar mudanças de roteamento/peering e políticas de traffic shaping/policing no período citado (inclusive IX/RJ). Se houver sinais de congestionamento, planejar mitigação (aumento de capacidade, ajuste de filas QoS).
+  - Ação 4 (NOC/Field): Rodar iperf3 com múltiplos fluxos a partir de client02 e client01 para rnp_rj, registrando perdas, retransmissões e variância por fluxo.
+
+- Ativo: Servidor/PoP gru03 (evidências em ambas as análises, multi-cliente)
+  - Ação 1 (NOC): Checar utilização, filas e perdas no caminho/PoP do gru03, com foco em 2024-06-28 a 2024-07-01 (evento severo) e 2024-05-06 a 2024-07-09 (período prolongado).
+  - Ação 2 (Field): Executar MTR/traceroute de client09 e client12 para gru03 (e também para um controle saudável, como rnp_sp) em horários equivalentes; repetir para client07 e client13 (histórico de RTT alto até 07/09–07/17).
+  - Ação 3 (Engenharia): Avaliar capacidade/filas no enlace de acesso/peering desse PoP; checar eventos de manutenção/rota no fim de junho. Caso confirme congestionamento, planejar reforço de capacidade ou realocação de tráfego.
+
+- Ativo: Cliente client02 (caso mais consistente)
+  - Ação 1 (Field): Comparar rotas client02→rnp_rj/rnp_sp vs. client02→GRU (controle saudável) e identificar o primeiro salto/AS onde o RTT/jitter se eleva.
+  - Ação 2 (NOC): Cruzar janelas de instabilidade com “eventos”/mudanças operacionais registrados; verificar se há correlação temporal.
+  - Ação 3 (Engenharia): Se o gargalo for em segmento compartilhado (peering/IX), coordenar com o parceiro para mitigação.
+
+Média prioridade (executar após o bloco acima ou em paralelo, conforme disponibilidade)
+- Ativo: rnp_sp (episódios seletivos)
+  - Ação 1 (NOC): Checar utilização/filas no caminho para rnp_sp nas janelas: 2024-05-06 a 2024-05-08 (client02), a partir de 2024-06-12 (client07) e 2024-07-07 a 2024-07-17 (client12).
+  - Ação 2 (Field): Rodar iperf3 e MTR de clientes afetados para rnp_sp para identificar possível limitação/policer.
+
+- Ativo: gru05 (episódio curto)
+  - Ação 1 (NOC): Validar indicadores de 2024-07-08 a 2024-07-14 (client12) e confirmar/descartar congestionamento pontual.
+  - Ação 2 (Field): Traceroute/MTR de client12 para gru05 em horário de pico.
+
+- Corroboração cruzada
+  - Ação (NOC): Em cada janela problemática, comparar com medições de clientes geograficamente/próximos topologicamente para isolar se o problema é do acesso/agragação local ou do upstream/peering.
+
+- Monitoramento e alertas (foco nos principais gatilhos)
+  - Ação (NOC): Implementar alertas para rtt_download_std e rtt_download_mean acima de limiares definidos por destino; incluir alerta para queda de throughput_download_mean.
+  - Ação (NOC): Registrar automaticamente MTR/traceroute quando alertas forem disparados, para captura do estado do caminho durante a degradação.
+
+Baixa prioridade (melhorias contínuas e pós-incidente)
+- Ação (Engenharia): Pós-mortem dos eventos resolvidos (ex.: gru03 até 07/01 e rnp_rj em meados de junho/julho), documentando causa-raiz e ações preventivas.
+- Ação (NOC): Refinar limiares de alerta com base nas janelas já identificadas.
+- Ação (Engenharia): Avaliar políticas de QoS nas interfaces/peers mais críticos para reduzir jitter em horários de pico.
+
+Observações finais
+- O padrão mais consistente de risco nas duas análises é o aumento de jitter e da média do RTT de download; trate estes sinais como disparadores primários de investigação.
+- rnp_rj (multi-cliente em janelas específicas) e gru03 (degradação por múltiplos clientes, com evento severo no fim de junho) são os pontos de maior atenção no curto prazo.
+- client02 é o caso de cliente mais persistente e deve ser acompanhado de perto para isolar o primeiro salto problemático e agir sobre o segmento responsável.

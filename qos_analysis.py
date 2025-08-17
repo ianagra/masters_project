@@ -15,7 +15,7 @@ from prompt_templates import PROMPTS
 load_dotenv(".env")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
 
-ANALYZER_MODEL = "phi4-reasoning:plus"
+ANALYZER_MODEL = "gpt-oss:20b"
 ANALYZER_TEMP  = 0.3
 MODEL_NAME     = ANALYZER_MODEL.replace(":", "-")
 
@@ -75,16 +75,37 @@ class OllamaLLM:
         return self.chat.invoke(prompt).content.strip()
 
 ###############################################################################
-# Seletores de coeficientes
+# Seletores de coeficientes e métricas
 ###############################################################################
-def select_entity_coefficients(df: pd.DataFrame, worst_cluster: int) -> List[Dict[str, Any]]:
-    df_ent = df[df["type"].isin({"client", "server"})][["feature", "type", "coefficient"]].copy()
+def select_client_coefficients(df: pd.DataFrame, worst_cluster: int) -> List[Dict[str, Any]]:
+    df_ent = df[df["type"] == "client"][["feature", "type", "coefficient"]].copy()
     sign_mask = df_ent["coefficient"] > 0 if worst_cluster == 1 else df_ent["coefficient"] < 0
     df_sel = df_ent.loc[sign_mask].copy()
     df_sel["abs_coef"] = df_sel["coefficient"].abs()
-    thr = df_sel["abs_coef"].mean()
+    #thr = df_sel["abs_coef"].quantile(0.75)
+    thr = df_sel["abs_coef"].median()
     df_fin = df_sel[df_sel["abs_coef"] > thr].sort_values("abs_coef", ascending=False).copy()
-    return df_fin.head(10)[["feature", "type", "coefficient"]].to_dict("records")
+    return df_fin[["feature", "type", "coefficient"]].to_dict("records")
+
+def select_server_coefficients(df: pd.DataFrame, worst_cluster: int) -> List[Dict[str, Any]]:
+    df_ent = df[df["type"] == "server"][["feature", "type", "coefficient"]].copy()
+    sign_mask = df_ent["coefficient"] > 0 if worst_cluster == 1 else df_ent["coefficient"] < 0
+    df_sel = df_ent.loc[sign_mask].copy()
+    df_sel["abs_coef"] = df_sel["coefficient"].abs()
+    #thr = df_sel["abs_coef"].quantile(0.75)
+    thr = df_sel["abs_coef"].median()
+    df_fin = df_sel[df_sel["abs_coef"] > thr].sort_values("abs_coef", ascending=False).copy()
+    return df_fin[["feature", "type", "coefficient"]].to_dict("records")
+
+def select_metric_coefficients(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Filtra e seleciona os coeficientes das métricas para análise."""
+    df_met = df[df["type"] == "metric"].copy()
+    df_met["abs_coef"] = df_met["coefficient"].abs()
+    #thr = df_sel["abs_coef"].quantile(0.75)
+    thr = df_met["abs_coef"].median()
+    df_fin = df_met[df_met["abs_coef"] > thr].sort_values("abs_coef", ascending=False).copy()
+    return df_fin[["feature", "coefficient"]].to_dict("records")
+
 
 ###############################################################################
 # Cluster pior – agora também registra PROMPT / RESPONSE / RESULT do tool-LLM
@@ -168,49 +189,84 @@ class QoSAnalyzer:
         self.log.log(stage("1"), metric, "RESPONSE", r1_raw)
         r1 = strip_think_blocks(r1_raw)
 
-        # Etapa 2 – Critical Elements
-        ent_coefs = select_entity_coefficients(coef_df, worst)
-        p2_body = PROMPTS["critical_elements"].format(
+        # Etapa 2 - Análise das métricas mais impactantes
+        metric_coefs = select_metric_coefficients(coef_df)
+        p2_body = PROMPTS["critical_metrics"].format(
+            WORST_CLUSTER_ID=worst,
             PREVIOUS_OUTPUT=r1,
-            DATA_JSON=json.dumps(ent_coefs, indent=2, ensure_ascii=False))
+            DATA_JSON=json.dumps(metric_coefs, indent=2, ensure_ascii=False))
         r2_raw = self.analyzer_llm(self._wrap(p2_body))
         self.log.log(stage("2"), metric, "PROMPT", p2_body)
         self.log.log(stage("2"), metric, "RESPONSE", r2_raw)
         r2 = strip_think_blocks(r2_raw)
 
-        # Etapa 3 – Interval Diagnosis
-        surv_df = pd.read_csv(paths["survival"])
-        diags = []
-        for ent in [d["feature"] for d in ent_coefs]:
-            p3_body = PROMPTS["interval_diagnosis"].format(
-                ELEMENT_ID=ent,
-                DATA_JSON=json.dumps(self._subset(surv_df, ent)))
-            r3_raw = self.analyzer_llm(self._wrap(p3_body))
-            self.log.log(stage("3"), metric, "PROMPT", p3_body)
-            self.log.log(stage("3"), metric, "RESPONSE", r3_raw)
-            diags.append(strip_think_blocks(r3_raw))
+        # Etapa 3 – Listagem de clientes críticos
+        client_coefs = select_client_coefficients(coef_df, worst)
+        p3_body = PROMPTS["critical_clients"].format(
+            PREVIOUS_OUTPUT=r1,
+            DATA_JSON=json.dumps(client_coefs, indent=2, ensure_ascii=False))
+        r3_raw = self.analyzer_llm(self._wrap(p3_body))
+        self.log.log(stage("3"), metric, "PROMPT", p3_body)
+        self.log.log(stage("3"), metric, "RESPONSE", r3_raw)
+        r3 = strip_think_blocks(r3_raw)
 
-        # Etapa 4 – Approach Report
-        prev = f"{r1}\n\n{r2}\n\n" + "\n\n".join(diags)
-        p4_body = PROMPTS["approach_report"].format(
+        # Etapa 4 – Análise dos intervalos dos clientes críticos
+        surv_df = pd.read_csv(paths["survival"])
+        diags_clients = []
+        for client in [d["feature"] for d in client_coefs]:
+            p4_body = PROMPTS["interval_diagnosis_client"].format(
+                CLIENT_ID=client,
+                CRITICAL_METRICS_ANALYSIS=r2,
+                DATA_JSON=json.dumps(self._subset(surv_df, client)))
+            r4_raw = self.analyzer_llm(self._wrap(p4_body))
+            self.log.log(stage("4"), metric, "PROMPT", p4_body)
+            self.log.log(stage("4"), metric, "RESPONSE", r4_raw)
+            diags_clients.append(strip_think_blocks(r4_raw))
+
+        # Etapa 5 – Listagem de servidores críticos
+        server_coefs = select_server_coefficients(coef_df, worst)
+        p5_body = PROMPTS["critical_servers"].format(
+            PREVIOUS_OUTPUT=r1,
+            DATA_JSON=json.dumps(server_coefs, indent=2, ensure_ascii=False))
+        r5_raw = self.analyzer_llm(self._wrap(p5_body))
+        self.log.log(stage("5"), metric, "PROMPT", p5_body)
+        self.log.log(stage("5"), metric, "RESPONSE", r5_raw)
+        r5 = strip_think_blocks(r5_raw)
+
+        # Etapa 6 – Análise dos intervalos dos servidores críticos
+        surv_df = pd.read_csv(paths["survival"])
+        diags_servers = []
+        for server in [d["feature"] for d in server_coefs]:
+            p6_body = PROMPTS["interval_diagnosis_server"].format(
+                SERVER_ID=server,
+                CRITICAL_METRICS_ANALYSIS=r2,
+                DATA_JSON=json.dumps(self._subset(surv_df, server)))
+            r6_raw = self.analyzer_llm(self._wrap(p6_body))
+            self.log.log(stage("6"), metric, "PROMPT", p6_body)
+            self.log.log(stage("6"), metric, "RESPONSE", r6_raw)
+            diags_servers.append(strip_think_blocks(r6_raw))
+
+        # Etapa 7 – Relatório da abordagem
+        prev = f"{r1}\n\n{r2}\n\n{r3}\n\n{r5}\n\n" + "\n\n".join(diags_clients) + "\n\n" + "\n\n".join(diags_servers)
+        p7_body = PROMPTS["approach_report"].format(
             APPROACH_NAME=metric, PREVIOUS_OUTPUT=prev)
-        r4_raw = self.analyzer_llm(self._wrap(p4_body))
-        self.log.log(stage("4"), metric, "PROMPT", p4_body)
-        self.log.log(stage("4"), metric, "RESPONSE", r4_raw)
-        report = strip_think_blocks(r4_raw)
+        r7_raw = self.analyzer_llm(self._wrap(p7_body))
+        self.log.log(stage("7"), metric, "PROMPT", p7_body)
+        self.log.log(stage("7"), metric, "RESPONSE", r7_raw)
+        report = strip_think_blocks(r7_raw)
 
         out = REPORT_DIR / f"{RUN_TS}_{MODEL_NAME}_{metric}.txt"
         out.write_text(report, encoding="utf-8")
         return report
 
-    # Consolidação
+    # Etapa 8 - Consolidação
     def _consolidate(self, rep: Dict[str, str]) -> str:
         prev = ("\n\n==== Throughput approach ====\n" + rep["throughput_download"] +
                 "\n\n==== RTT approach ====\n"        + rep["rtt_upload"])
-        p5_body = PROMPTS["consolidated_report"].format(PREVIOUS_OUTPUT=prev)
-        raw = self.analyzer_llm(self._wrap(p5_body))
-        self.log.log("STAGE 5", "consolidated", "PROMPT", p5_body)
-        self.log.log("STAGE 5", "consolidated", "RESPONSE", raw)
+        p8_body = PROMPTS["consolidated_report"].format(PREVIOUS_OUTPUT=prev)
+        raw = self.analyzer_llm(self._wrap(p8_body))
+        self.log.log("STAGE 8", "consolidated", "PROMPT", p8_body)
+        self.log.log("STAGE 8", "consolidated", "RESPONSE", raw)
         return strip_think_blocks(raw)
 
     # Pipeline completo

@@ -1,0 +1,54 @@
+## QoS Assessment Report: rtt_upload Approach
+
+### 1) Executive Summary
+Two distinct QoS profiles were identified. Cluster 1 (low-risk) shows long, stable intervals with high throughput (~660 Mb/s down/up) and low RTT (~18/20 ms). Cluster 0 (high-risk) shows short, unstable intervals with degraded throughput (~307/281 Mb/s) and elevated RTT (~96/98 ms). The strongest drivers of instability are higher download RTT jitter and higher mean download RTT, while higher download throughput strongly favors stability. The most critical clients are client09, client12, and client02; the most critical server is rnp_rj. Instability is predominantly path/site-specific: client09 and client12 degrade toward gru03 (including a severe late-June event), while client02 (and client01, from the server perspective) exhibit episodic degradations toward rnp_rj in May–June (and mid-July for client01).
+
+### 2) Detailed Findings
+
+- Cluster profiles
+  - Cluster 1 — Stable (Low-Risk): time_mean ≈ 31.45 days; event_frequency ≈ 0.03; survival remains ≥0.933 out to 90 days; throughput high (down/up ≈ 661/660 Mb/s); RTT low (down/up ≈ 17.95/20.41 ms).
+  - Cluster 0 — Unstable (High-Risk): time_mean ≈ 10.55 days; event_frequency ≈ 0.65; survival decays to 0.11 by 60–90 days; throughput degraded (down/up ≈ 307/281 Mb/s); RTT high (down/up ≈ 96.35/98.06 ms).
+
+- Most critical clients
+  - client09 (coefficient = -0.9923): Instability exclusively when testing to gru03 (eight high-risk intervals). Symptoms: elevated download RTT (~116–121 ms), high download RTT jitter (spikes up to ~27–32 ms), and a late-June collapse (download ≈ 94 Mb/s, RTT ≈ 212 ms). All other sites (gru05, gru06, rnp_rj, rnp_sp) remain consistently stable with high throughput (~831–905 Mb/s) and low RTT (~13–19 ms).
+  - client12 (coefficient = -0.7821): Prolonged instability to gru03 from 2024-05-06 to 2024-07-09 (five consecutive high-risk intervals), including a severe dip 2024-06-28 to 2024-07-01 (download ≈ 81 Mb/s; RTT ≈ 223 ms). Brief high-risk episodes also at gru05 (2024-07-08 to 2024-07-14) and rnp_sp (2024-07-07 to 2024-07-17). Stable to gru06 and rnp_rj.
+  - client02 (coefficient = -0.6515): Instability concentrated toward rnp_rj (2024-05-08 to 2024-06-15), including a sub-period of marked download degradation/variance (2024-06-02 to 2024-06-15: mean ≈ 554 Mb/s; std ≈ 78 Mb/s). One brief high-risk interval to rnp_sp (2024-05-06 to 2024-05-08). Stable to gru03, gru05, and gru06.
+
+- Most critical servers
+  - rnp_rj (coefficient = -0.9031): Mostly stable overall (33/44 intervals Cluster 1), with high-risk intervals concentrated to specific clients:
+    - client01: high-risk from 2024-05-07 to 2024-06-01 and again 2024-07-11 to 2024-07-18 (elevated download RTT jitter/mean in May; depressed/variable download throughput in July).
+    - client02: high-risk from 2024-05-08 to 2024-06-15 (download throughput drop and high variance in early June).
+    - All other clients (client03–client16): stable.
+
+- Metrics with greatest impact on stability (log-odds of belonging to Cluster 1)
+  - rtt_download_std, coefficient = -1.9935 (strongest, negative): Higher download RTT jitter sharply increases odds of instability (Cluster 0).
+  - throughput_download_mean, coefficient = +1.3197: Higher mean download throughput favors stability (Cluster 1); depressed download throughput aligns with risk.
+  - throughput_upload_std, coefficient = +0.8281: In this dataset, higher upload throughput variability is more prevalent in stable intervals; low variability appears more in high-risk intervals.
+  - rtt_download_mean, coefficient = -0.6625: Higher mean download RTT increases odds of instability.
+
+Observed client/server behaviors are consistent with these directions: high download RTT jitter and high mean RTT are prominent in high-risk windows to gru03 (client09, client12) and during rnp_rj degradations (client01 mid-May); depressed and volatile download throughput characterizes the rnp_rj high-risk sub-periods (client02 early June; client01 mid-July).
+
+### 3) Recommended Actions
+
+- Path diagnostics to gru03 (client09, client12)
+  - Run scheduled traceroute/Paris-traceroute and MTR from client09 and client12 to gru03 and, in parallel, to a healthy control (e.g., rnp_sp). Focus on hop-level latency/jitter and loss during windows analogous to:
+    - client09: 2024-06-05 → 2024-07-01 (including 2024-06-28 → 2024-07-01 severe event).
+    - client12: 2024-05-06 → 2024-07-09 (prolonged instability).
+  - Correlate with server-side/utilization logs and interface queue metrics at/near gru03, especially around late June, to validate congestion/queuing as root cause.
+
+- Path diagnostics to rnp_rj (client01, client02)
+  - Coordinate bi-directional traceroute/MTR (from clients to rnp_rj and from rnp_rj back) during or emulating:
+    - client01: 2024-05-07 → 2024-06-01 and 2024-07-11 → 2024-07-18.
+    - client02: 2024-05-08 → 2024-06-15 (notably 2024-06-02 → 2024-06-15).
+  - Review routing/peering change logs and interface utilization/queueing on the RJ path for these dates; validate whether intermittent congestion or path changes drove increased RTT/jitter and depressed download throughput.
+  - Run controlled throughput tests (e.g., NDT/iperf) across different times of day to check for time-correlated congestion signatures.
+
+- Monitoring and alerting enhancements
+  - Establish alerts on rtt_download_std and rtt_download_mean thresholds (primary risk drivers), and on throughput_download_mean drops, to trigger path diagnostics automatically.
+  - Track throughput_upload_std trends as a stability corroborator (low values coinciding with other risk signals can strengthen Cluster 0 suspicion).
+
+- Cross-validation with nearby probes
+  - For each identified window, compare with measurements from geographically/architecturally adjacent clients (e.g., for rnp_rj issues, use a nearby client that remained stable) to isolate access/aggregation vs. upstream/peering segments.
+
+- Operations coordination
+  - Engage with RNP/peer operators for gru03 and rnp_rj to review capacity, queue policies, and maintenance/routing events around the cited periods, sharing hop-level evidence from traceroute/MTR and the interval metrics.
