@@ -1,0 +1,63 @@
+## QoS Assessment Report: rtt_upload Approach  
+
+### Executive Summary  
+The analysis of 16 Raspberry Pi probes running NDT every 30 minutes reveals a clear dichotomy between two clusters of network behavior. Cluster 0 (high‑risk) is marked by short, event‑laden intervals, low throughput, and high RTTs, while Cluster 1 (low‑risk) enjoys longer, stable intervals with high throughput and low latency. The most critical clients—**client09, client12, client02**—and the single critical server—**rnp_rj**—are consistently associated with Cluster 0. The logistic regression highlights **rtt_download_std**, **throughput_download_mean**, **throughput_upload_std**, and **rtt_download_mean** as the strongest drivers of instability, with download latency variability and mean latency exerting the largest negative influence on cluster membership.
+
+---
+
+### Detailed Findings  
+
+#### Cluster Characteristics  
+- **Cluster 0 (High‑Risk)**  
+  - Mean interval duration: 10.5 min  
+  - Event frequency: 0.645 (≈ 64 %)  
+  - Survival probability: 0.27 at 30 days  
+  - Throughput: ~307 Mbps (download), ~281 Mbps (upload)  
+  - RTT: ~96 ms (download), ~98 ms (upload)  
+  - High variability in all metrics  
+
+- **Cluster 1 (Low‑Risk)**  
+  - Mean interval duration: 31.5 min  
+  - Event frequency: 0.030 (≈ 3 %)  
+  - Survival probability: 0.93 at 60 days  
+  - Throughput: ~661 Mbps (download), ~660 Mbps (upload)  
+  - RTT: ~18 ms (download), ~20 ms (upload)  
+  - Low variability  
+
+#### Most Critical Clients  
+- **client09** – consistently unstable when contacting **gru03**; stable with other servers.  
+- **client12** – long period of stability interrupted by high‑risk intervals with **gru03, gru05, gru06, rnp_sp**.  
+- **client02** – intermittent instability tied to **rnp_rj** and **rnp_sp**.  
+
+#### Most Critical Server  
+- **rnp_rj** – the only server that appears in high‑risk intervals for **client01** and **client02**; shows elevated RTT mean and variance during those periods.  
+
+#### Metrics with Greatest Impact on Stability  
+- **rtt_download_std** – negative coefficient (–1.99). Larger variability in download latency dramatically increases the odds of being in the high‑risk cluster.  
+- **rtt_download_mean** – negative coefficient (–0.66). Higher average download latency pushes intervals toward instability.  
+- **throughput_download_mean** – positive coefficient (+1.32). Higher average download throughput favors the low‑risk cluster; lower throughput drives instability.  
+- **throughput_upload_std** – positive coefficient (+0.83). Although upload variability is less critical than download latency, higher upload variability still correlates with the low‑risk cluster, suggesting that upload stability is a secondary indicator.  
+
+---
+
+### Recommended Actions  
+
+- **Path‑specific diagnostics**  
+  - Run `traceroute` and `mtr` from the affected clients (client09, client12, client02) to the problematic servers (gru03, gru05, gru06, rnp_sp, rnp_rj) during identified high‑risk intervals.  
+  - Compare hop‑by‑hop RTTs and packet loss against baseline measurements to isolate the segment causing latency spikes.  
+
+- **Routing and peering review**  
+  - Inspect BGP routing tables and peering logs for the paths to **gru03** and **rnp_rj** during the high‑risk windows.  
+  - Verify that no routing flaps or sub‑optimal path selections are occurring.  
+
+- **QoS policy adjustment**  
+  - Consider enforcing stricter QoS on the upstream links to the identified servers, prioritizing critical traffic and limiting bursty uploads that may contribute to upload variability.  
+
+- **Continuous monitoring**  
+  - Deploy real‑time dashboards that flag intervals where `rtt_download_std` or `rtt_download_mean` exceed predefined thresholds.  
+  - Automate alerts for sudden drops in `throughput_download_mean` to pre‑empt stability degradation.  
+
+- **Infrastructure review**  
+  - Evaluate the capacity and health of the edge routers handling traffic to **gru03** and **rnp_rj**; upgrade if necessary to reduce congestion.  
+
+Implementing these steps will pinpoint the root causes of the observed instability, enable targeted remediation, and improve overall QoS for the affected clients and servers.

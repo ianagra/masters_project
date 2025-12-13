@@ -210,16 +210,12 @@ def plot_pairs(data, pairs, cp_ref_metric, survival=True, local_mean=True, chang
         legend_elements = []
         
         # Cluster 0 (vermelho)
-        legend_elements.append(plt.Line2D([0], [0], color=get_cluster_color(0, 0.5), 
-                            label=f'Cluster 0: P < 0.65'))
         legend_elements.append(plt.Line2D([0], [0], color=get_cluster_color(0, 0.9), 
-                            label=f'Cluster 0: P >= 0.65'))
+                            label=f'Cluster 0'))
         
         # Cluster 1 (azul)
-        legend_elements.append(plt.Line2D([0], [0], color=get_cluster_color(1, 0.5), 
-                            label=f'Cluster 1: P < 0.65'))
         legend_elements.append(plt.Line2D([0], [0], color=get_cluster_color(1, 0.9), 
-                            label=f'Cluster 1: P >= 0.65'))
+                            label=f'Cluster 1'))
         
         return legend_elements
     

@@ -1,0 +1,80 @@
+## 1. Executive Summary: Capacidade vs. Responsividade  
+
+- **Capacidade (throughput)** mede quanto “peso” de dados conseguimos entregar por segundo. Se a largura‑de‑banda cai, os downloads e uploads ficam mais lentos, mesmo que a rota seja rápida.  
+- **Responsividade (RTT)** mede o tempo que um pacote leva para ir do cliente ao servidor e voltar. Latência alta ou instável faz a conexão parecer lenta, mesmo que a banda esteja disponível.  
+
+**Principais descobertas**  
+
+| Perspectiva | O que o modelo apontou | Impacto na experiência do usuário |
+|-------------|------------------------|-----------------------------------|
+| **Throughput** | Cluster 0 (alto risco) tem download ≈ 450 Mbps, upload ≈ 430 Mbps e RTT ≈ 60 ms. | Usuários sentem a conexão “lenta” porque a banda não atende à demanda. |
+| **RTT** | Cluster 0 tem RTT ≈ 96 ms, throughput ≈ 307 Mbps e intervalos curtos e instáveis. | Usuários sentem a conexão “irritante” por latência alta e flutuações frequentes. |
+
+Em resumo, a **latência** (RTT) é o principal motor de instabilidade, mas a **banda** também contribui quando a latência já está alta.
+
+---
+
+## 2. Unified Diagnosis: Onde Estão os Pontos Críticos?  
+
+### Clientes críticos  
+| Cliente | Identificado em | Observação |
+|---------|-----------------|------------|
+| **client02** | Ambos | Mais vulnerável, aparece em ambos os clusters de risco. |
+| **client07** | Throughput | Problema de baixa banda e latência alta. |
+| **client13** | Throughput | Problema de baixa banda e latência alta. |
+| **client09** | RTT | Problema de latência alta e jitter. |
+| **client12** | RTT | Problema de latência alta e jitter. |
+
+### Servidores críticos  
+| Servidor | Identificado em | Observação |
+|----------|-----------------|------------|
+| **rnp_rj** | Ambos | Principal ponto de falha: latência alta e baixa banda. |
+
+### Métricas de maior impacto  
+1. **rtt_download_mean** – latência média de download. Quanto maior, maior a probabilidade de instabilidade.  
+2. **rtt_download_std** – variação da latência de download (jitter). Jitter alto indica rota instável.  
+3. **rtt_upload_mean** – latência média de upload.  
+4. **throughput_download_mean** – banda média de download. Banda baixa favorece o cluster de risco.  
+5. **throughput_upload_std** – variação da banda de upload. Menor variação favorece a estabilidade.  
+
+### Gargalos consistentes (top‑prioridade)  
+- **rnp_rj** – aparece em ambos os relatórios.  
+- **client02** – aparece em ambos os relatórios.  
+- **latência média e jitter de download** – determinantes em ambos os modelos.  
+
+### Problemas exclusivos de uma abordagem  
+- **client07 & client13** – baixa banda e latência alta, mas não aparecem no relatório de RTT. Indica que a rota pode ser estável em termos de latência, mas a largura‑de‑banda é insuficiente.  
+- **client09 & client12** – latência alta e jitter, mas a banda não é tão baixa. Indica que a rota pode estar sobrecarregada ou mal roteada.  
+
+---
+
+## 3. Prioritized Action Plan  
+
+### High Priority  
+| Asset | Action 1 (NOC) | Action 2 (Field Team) | Action 3 (Engineering) |
+|-------|----------------|-----------------------|------------------------|
+| **Server rnp_rj** | Verificar dashboards de monitoramento (CPU, memória, link) e alertas de saturação. | Executar `traceroute` e `mtr` de `client02`, `client07`, `client13` para `rnp_rj` durante períodos de Cluster 0. | Revisar políticas de roteamento e peering com RNP; considerar rotas alternativas ou ajuste de BGP. |
+| **Client02** | Checar logs de NDT e alertas de latência no NOC. | Realizar `traceroute` de `client02` para `rnp_rj` e para outros servidores (gru03, rnp_sp) durante Cluster 0. | Avaliar se a rota passa por links congestionados; coordenar com provedor local para otimização. |
+
+### Medium Priority  
+| Asset | Action 1 (NOC) | Action 2 (Field Team) | Action 3 (Engineering) |
+|-------|----------------|-----------------------|------------------------|
+| **Client07** | Monitorar throughput de download e upload; alertar se < 500 Mbps. | Executar `traceroute` para `rnp_rj` e comparar com `gru05`. | Verificar se há QoS ou congestionamento na rota local. |
+| **Client13** | Monitorar latência de download; alertar se > 50 ms. | Executar `traceroute` para `rnp_rj`. | Avaliar se há perda de pacotes ou pacotes atrasados na rota. |
+| **Client09** | Alertar quando `rtt_download_std` > 5 ms ou `rtt_download_mean` > 80 ms. | Executar `traceroute` para `gru03`, `gru05`, `gru06`. | Revisar rotas BGP para esses servidores; considerar políticas de preferência de rota. |
+| **Client12** | Monitorar throughput de download; alertar se < 600 Mbps. | Executar `traceroute` para `gru03`, `gru05`, `gru06`, `rnp_sp`. | Avaliar se a rota está passando por links de baixa capacidade. |
+
+### Low Priority  
+| Asset | Action 1 (NOC) | Action 2 (Field Team) |
+|-------|----------------|-----------------------|
+| **All clients** | Configurar dashboards de métricas de RTT e throughput em tempo real. | Realizar testes de carga em horários de pico para validar melhorias. |
+| **All servers** | Revisar logs de QoS e políticas de priorização de tráfego. | Testar ajustes de QoS em links de entrada/saída. |
+
+---
+
+**Resumo de ação**  
+1. **Imediato**: Verificar e corrigir problemas no `rnp_rj` e no `client02`.  
+2. **Próximo passo**: Corrigir baixa banda em `client07` e `client13`; reduzir jitter em `client09` e `client12`.  
+3. **Manutenção contínua**: Monitorar métricas em tempo real, ajustar rotas e políticas de QoS conforme necessário.  
+
+Seguindo essa ordem, a equipe de operações conseguirá reduzir a latência e a variabilidade, melhorar a largura‑de‑banda onde for preciso e, consequentemente, elevar a qualidade de serviço para todos os usuários.

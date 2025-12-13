@@ -15,17 +15,13 @@ from prompt_templates import PROMPTS
 load_dotenv(".env")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-ANALYZER_MODEL = "gpt-5"
-ANALYZER_TEMP  = 0.3
-MODEL_NAME     = ANALYZER_MODEL.replace(":", "-")
-
-TOOL_MODEL = "gpt-5"
-TOOL_TEMP  = 0.0
+MODEL = "gpt-5"
+TEMP  = 0.3
 
 RUN_TS     = datetime.now().strftime("%Y%m%d_%H%M%S")
 LOG_DIR    = Path("logs");    LOG_DIR.mkdir(exist_ok=True)
 REPORT_DIR = Path("reports"); REPORT_DIR.mkdir(exist_ok=True)
-LOG_FILE   = LOG_DIR / f"{RUN_TS}_{MODEL_NAME}.txt"
+LOG_FILE   = LOG_DIR / f"{RUN_TS}_{MODEL}.txt"
 
 ###############################################################################
 # Utilidades – remoção opcional de blocos de raciocínio
@@ -68,10 +64,9 @@ class PromptLogger:
 # Wrapper LLM (OpenAI)
 ###############################################################################
 class OpenAILLM:
-    def __init__(self, model: str, temperature: float):
+    def __init__(self, model: str):
         self.chat = ChatOpenAI(
             model=model,
-            #temperature=temperature,
             openai_api_key=OPENAI_API_KEY
         )
 
@@ -111,35 +106,6 @@ def select_metric_coefficients(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return df_fin[["feature", "coefficient"]].to_dict("records")
 
 ###############################################################################
-# Cluster pior – agora também registra PROMPT / RESPONSE / RESULT do tool-LLM
-###############################################################################
-def determine_worst_cluster(
-    tool_llm: "OllamaLLM",
-    stats: List[Dict[str, Any]],
-    logger: PromptLogger,
-    metric: str,
-) -> int:
-    prompt = (
-        "You are a network QoS expert. Given the JSON below, which cluster (0 or 1) "
-        "has WORSE quality (higher RTT, lower throughput, higher event frequency). "
-        "Respond ONLY with the number 0 or 1.\n\nJSON:\n"
-        f"```json\n{json.dumps(stats, ensure_ascii=False)}\n```\nAnswer:"
-    )
-
-    # ---- logging da chamada (function-call) ----
-    logger.log("STAGE 0", metric, "TOOL PROMPT", prompt)
-
-    raw_response = tool_llm(prompt)
-
-    logger.log("STAGE 0", metric, "TOOL RESPONSE", raw_response)
-
-    worst = int(strip_think_blocks(raw_response))
-
-    logger.log("STAGE 0", metric, "TOOL RESULT", f"worst_cluster = {worst}")
-
-    return worst
-
-###############################################################################
 # Pipeline
 ###############################################################################
 class QoSAnalyzer:
@@ -156,8 +122,8 @@ class QoSAnalyzer:
         },
     }
 
-    def __init__(self, analyzer_llm: OllamaLLM, tool_llm: OllamaLLM, log: PromptLogger):
-        self.analyzer_llm, self.tool_llm, self.log = analyzer_llm, tool_llm, log
+    def __init__(self, analyzer_llm: OpenAILLM, log: PromptLogger):
+        self.analyzer_llm, self.log = analyzer_llm, log
         self.system_prompt = PROMPTS["system"].strip()
 
     def _wrap(self, body: str) -> str:
@@ -181,39 +147,56 @@ class QoSAnalyzer:
         coef_df     = pd.read_csv(paths["coefficients"])
         clusters_json = clusters_df.to_dict("records")
 
-        # Etapa 0 – usa tool-LLM e agora loga todo o ciclo
-        worst = determine_worst_cluster(self.tool_llm, clusters_json, self.log, metric)
-
-        # Etapa 1 – Cluster Analysis
+        # ===================== ETAPA 1 =====================
+        # 1A) Cluster Analysis
         p1_body = PROMPTS["cluster_analysis"].format(
             DATA_JSON=json.dumps({"cluster_stats": clusters_json}, indent=2, ensure_ascii=False))
+        self.log.log(stage("1A"), metric, "PROMPT", p1_body)
         r1_raw = self.analyzer_llm(self._wrap(p1_body))
-        self.log.log(stage("1"), metric, "PROMPT", p1_body)
-        self.log.log(stage("1"), metric, "RESPONSE", r1_raw)
+        self.log.log(stage("1A"), metric, "RESPONSE", r1_raw)
         r1 = strip_think_blocks(r1_raw)
 
-        # Etapa 2 - Análise das métricas mais impactantes
+        # 1B) Extração do cluster pior usando a PRÓPRIA resposta da 1A
+        p1b_body = PROMPTS["worst_cluster_from_profile"].format(PREVIOUS_OUTPUT=r1)
+        self.log.log(stage("1B"), metric, "PROMPT", p1b_body)
+        r1b_raw = self.analyzer_llm(self._wrap(p1b_body))
+        self.log.log(stage("1B"), metric, "RESPONSE", r1b_raw)
+        r1b = strip_think_blocks(r1b_raw)
+
+        # Sanitização para inteiro 0/1
+        m = re.search(r"[01]", r1b)
+        if not m:
+            # fallback conservador: tenta inferir por palavras-chave se o modelo não seguiu estritamente
+            # Preferência para "Cluster 1" se mencionado como high-risk; senão, 0.
+            worst = 1 if re.search(r"cluster\s*1", r1, flags=re.I) and re.search(r"high[- ]?risk", r1, flags=re.I) else 0
+        else:
+            worst = int(m.group(0))
+
+        self.log.log(stage("1B"), metric, "RESULT", f"worst_cluster = {worst}")
+
+        # ===================== ETAPA 2 =====================
         metric_coefs = select_metric_coefficients(coef_df)
         p2_body = PROMPTS["critical_metrics"].format(
             WORST_CLUSTER_ID=worst,
             PREVIOUS_OUTPUT=r1,
             DATA_JSON=json.dumps(metric_coefs, indent=2, ensure_ascii=False))
-        r2_raw = self.analyzer_llm(self._wrap(p2_body))
         self.log.log(stage("2"), metric, "PROMPT", p2_body)
+        r2_raw = self.analyzer_llm(self._wrap(p2_body))
         self.log.log(stage("2"), metric, "RESPONSE", r2_raw)
         r2 = strip_think_blocks(r2_raw)
 
-        # Etapa 3 – Listagem de clientes críticos
+        # ===================== ETAPA 3 =====================
         client_coefs = select_client_coefficients(coef_df, worst)
         p3_body = PROMPTS["critical_clients"].format(
+            WORST_CLUSTER_ID=worst,
             PREVIOUS_OUTPUT=r1,
             DATA_JSON=json.dumps(client_coefs, indent=2, ensure_ascii=False))
-        r3_raw = self.analyzer_llm(self._wrap(p3_body))
         self.log.log(stage("3"), metric, "PROMPT", p3_body)
+        r3_raw = self.analyzer_llm(self._wrap(p3_body))
         self.log.log(stage("3"), metric, "RESPONSE", r3_raw)
         r3 = strip_think_blocks(r3_raw)
 
-        # Etapa 4 – Análise dos intervalos dos clientes críticos
+        # ===================== ETAPA 4 =====================
         surv_df = pd.read_csv(paths["survival"])
         diags_clients = []
         for client in [d["feature"] for d in client_coefs]:
@@ -221,44 +204,44 @@ class QoSAnalyzer:
                 CLIENT_ID=client,
                 CRITICAL_METRICS_ANALYSIS=r2,
                 DATA_JSON=json.dumps(self._subset(surv_df, client)))
-            r4_raw = self.analyzer_llm(self._wrap(p4_body))
             self.log.log(stage("4"), metric, "PROMPT", p4_body)
+            r4_raw = self.analyzer_llm(self._wrap(p4_body))
             self.log.log(stage("4"), metric, "RESPONSE", r4_raw)
             diags_clients.append(strip_think_blocks(r4_raw))
 
-        # Etapa 5 – Listagem de servidores críticos
+        # ===================== ETAPA 5 =====================
         server_coefs = select_server_coefficients(coef_df, worst)
         p5_body = PROMPTS["critical_servers"].format(
+            WORST_CLUSTER_ID=worst,
             PREVIOUS_OUTPUT=r1,
             DATA_JSON=json.dumps(server_coefs, indent=2, ensure_ascii=False))
-        r5_raw = self.analyzer_llm(self._wrap(p5_body))
         self.log.log(stage("5"), metric, "PROMPT", p5_body)
+        r5_raw = self.analyzer_llm(self._wrap(p5_body))
         self.log.log(stage("5"), metric, "RESPONSE", r5_raw)
         r5 = strip_think_blocks(r5_raw)
 
-        # Etapa 6 – Análise dos intervalos dos servidores críticos
-        surv_df = pd.read_csv(paths["survival"])
+        # ===================== ETAPA 6 =====================
         diags_servers = []
         for server in [d["feature"] for d in server_coefs]:
             p6_body = PROMPTS["interval_diagnosis_server"].format(
                 SERVER_ID=server,
                 CRITICAL_METRICS_ANALYSIS=r2,
                 DATA_JSON=json.dumps(self._subset(surv_df, server)))
-            r6_raw = self.analyzer_llm(self._wrap(p6_body))
             self.log.log(stage("6"), metric, "PROMPT", p6_body)
+            r6_raw = self.analyzer_llm(self._wrap(p6_body))
             self.log.log(stage("6"), metric, "RESPONSE", r6_raw)
             diags_servers.append(strip_think_blocks(r6_raw))
 
-        # Etapa 7 – Relatório da abordagem
+        # ===================== ETAPA 7 =====================
         prev = f"{r1}\n\n{r2}\n\n{r3}\n\n{r5}\n\n" + "\n\n".join(diags_clients) + "\n\n" + "\n\n".join(diags_servers)
         p7_body = PROMPTS["approach_report"].format(
             APPROACH_NAME=metric, PREVIOUS_OUTPUT=prev)
-        r7_raw = self.analyzer_llm(self._wrap(p7_body))
         self.log.log(stage("7"), metric, "PROMPT", p7_body)
+        r7_raw = self.analyzer_llm(self._wrap(p7_body))
         self.log.log(stage("7"), metric, "RESPONSE", r7_raw)
         report = strip_think_blocks(r7_raw)
 
-        out = REPORT_DIR / f"{RUN_TS}_{MODEL_NAME}_{metric}.txt"
+        out = REPORT_DIR / f"{RUN_TS}_{MODEL}_{metric}.txt"
         out.write_text(report, encoding="utf-8")
         return report
 
@@ -267,8 +250,8 @@ class QoSAnalyzer:
         prev = ("\n\n==== Throughput approach ====\n" + rep["throughput_download"] +
                 "\n\n==== RTT approach ====\n"        + rep["rtt_upload"])
         p8_body = PROMPTS["consolidated_report"].format(PREVIOUS_OUTPUT=prev)
-        raw = self.analyzer_llm(self._wrap(p8_body))
         self.log.log("STAGE 8", "consolidated", "PROMPT", p8_body)
+        raw = self.analyzer_llm(self._wrap(p8_body))
         self.log.log("STAGE 8", "consolidated", "RESPONSE", raw)
         return strip_think_blocks(raw)
 
@@ -276,7 +259,7 @@ class QoSAnalyzer:
     def run(self):
         rep = {m: self._run_single(m, p) for m, p in self.FILES.items()}
         final = self._consolidate(rep)
-        dest  = REPORT_DIR / f"{RUN_TS}_{MODEL_NAME}_consolidated.txt"
+        dest  = REPORT_DIR / f"{RUN_TS}_{MODEL}_consolidated.txt"
         dest.write_text(final, encoding="utf-8")
         print(f"✅ Consolidated report saved to: {dest}")
 
@@ -286,9 +269,8 @@ class QoSAnalyzer:
 def main():
     system_prompt = PROMPTS["system"].strip()
     log = PromptLogger(LOG_FILE, system_prompt)
-    a_llm = OpenAILLM(ANALYZER_MODEL, ANALYZER_TEMP)
-    t_llm = OpenAILLM(TOOL_MODEL, TOOL_TEMP)
-    QoSAnalyzer(a_llm, t_llm, log).run()
+    a_llm = OpenAILLM(MODEL)
+    QoSAnalyzer(a_llm, log).run()
 
 if __name__ == "__main__":
     main()

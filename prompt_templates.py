@@ -24,22 +24,24 @@ You will analyze data from two parallel approaches, each defined by a different 
     - The model uses multinomial logistic regression with Cluster 0 as the baseline to define the probability of an interval belonging to one cluster or the other.
     - CRUCIAL: The logistic regression coefficients you will see are for the log-odds of an interval belonging to Cluster 1. A positive coefficient for a variable increases the odds of being in Cluster 1; a negative coefficient increases the odds of being in Cluster 0.
 
-# Your Six-Stage Mission
+# Your Eight-Stage Mission
 1. Cluster Analysis: Interpret aggregated cluster statistics to define a risk profile for each cluster.
 2. Identification of the most influential metrics: use the logistic regression coefficients to identify the metrics that have the greatest impact on the definition of the clusters.
-3. Critical Element Identification: Use the logistic regression coefficients to identify clients and servers most strongly associated with the high risk cluster.
-4. Interval Diagnosis: Analyze the temporal performance evolution of each ofthese critical elements.
-5. Technical Report per Approach: Consolidate findings for each approach (throughput and RTT) into a technical report.
-6. Consolidated Operational Report: Synthesize both technical reports into a single, actionable document for network operations teams.
+3. Critical Clients Identification: Use the logistic regression coefficients to identify clients most strongly associated with the high risk cluster.
+4. Critical Clients' Interval Diagnosis: Analyze the temporal performance evolution of each of these critical clients.
+5. Critical Servers Identification: Use the logistic regression coefficients to identify servers most strongly associated with the high risk cluster.
+6. Critical Servers' Interval Diagnosis: Analyze the temporal performance evolution of each of these critical servers.
+7. Technical Report per Approach: Consolidate findings for each approach (throughput and RTT) into a technical report.
+8. Consolidated Operational Report: Synthesize both technical reports into a single, actionable document for network operations teams.
 
 # Core Directives
 - Data Grounding: Base ALL conclusions strictly on the data provided in each step. Do not extrapolate or assume.
-- Output Language: All technical analyses (Stages 1-4) must be in expert-level English. The final Consolidated Operational Report (Stage 5) MUST be written in clear, accessible Brazilian Portuguese (PT-BR), keeping technical terms like "RTT" and "throughput" in English.
+- Output Language: All technical analyses (Stages 1-7) must be in expert-level English. The final Consolidated Operational Report (Stage 8) MUST be written in clear, accessible Brazilian Portuguese (PT-BR), keeping technical terms like "RTT" and "throughput" in English.
 - Formatting: Use Markdown `##` titles for structure. DO NOT write tables.
         """,
 
 # ------------------------------------------------------------------
-# Stage-1 prompt – cluster analysis
+# Stage-1A prompt – cluster analysis
 # ------------------------------------------------------------------
     "cluster_analysis":
         """
@@ -63,39 +65,66 @@ For each cluster (Cluster 0 and Cluster 1), provide the following analysis:
 Structure your response under a main Markdown heading "## Cluster Profile Analysis", with a separate subsection for each cluster.
 """,
 
+# ------------------------------------------------------------------
+# Stage-1B prompt – worst cluster identification
+# ------------------------------------------------------------------
+    "worst_cluster_from_profile":
+        """
+# Context
+You are a network QoS expert. You are given the "Cluster Profile Analysis" section, which contains the risk profiles of two clusters (0 and 1).
+
+# Task
+Determine which cluster (0 or 1) is the WORST (i.e., the one with high-risk profile).
+
+# Tie-braking rules
+Tie-breaking rules if both appear high-risk or the label is not explicit:
+1. Choose the cluster with LOWER survival probability and/or HIGHER event frequency. 
+2. If still tied, choose the one with WORSE latency (higher RTT) or WORSE throughput (lower). 
+3. If still tied, return None.
+
+---
+
+{PREVIOUS_OUTPUT}
+
+---
+
+Return ONLY the digit 0 or 1. Do not include any other text, punctuation, or code fences.
+""",
+
 # --------------------------------------------------------------------------
 # Stage-2 prompt – critical metrics detection
 # --------------------------------------------------------------------------
     "critical_metrics":
     """
 ## Context
-
-You will now identify which performance metrics are the primary drivers of network instability. Use the logistic regression coefficients to determine their impact.
+You will now explain why the selected performance metrics are considered the primary drivers of network instability.  
+These metrics were pre-selected based on their logistic regression coefficients: only those whose absolute values are above the 50th percentile were retained.  
+This ensures that only the most impactful metrics are included, according to their statistical weight in the model.
 
 ## Inputs
-
 1. Previous Cluster Profile Analysis (Worst cluster is Cluster {WORST_CLUSTER_ID}):
 
     {PREVIOUS_OUTPUT}
 
-2. Logistic Regression Coefficients for Metrics:
+2. Logistic Regression Coefficients for Metrics (filtered to include only the most impactful ones):
 
 ```json
 {DATA_JSON}
 ```
 
 ## Model Reminder
-
-The logistic regression coefficients are for the log-odds of an interval belonging to Cluster 1. Cluster 0 is the baseline. A negative coefficient for a variable increases the odds of it belonging to Cluster 0.
+The logistic regression coefficients are for the log-odds of an interval belonging to Cluster 1. Cluster 0 is the baseline.
+A negative coefficient for a variable increases the odds of it belonging to Cluster 0.
 
 ## Task
+For each metric in the provided list:
 
-1. Identify the performance metrics that most strongly influence whether a connection is stable or unstable.
-2. List the top 4 metrics with the largest coefficient magnitudes (absolute values).
-3. For each metric, explain its significance. Clarify what the sign of the coefficient means in relation to the high-risk cluster (Cluster {WORST_CLUSTER_ID}).
-    - Example: "A large negative coefficient for 'rtt_download_mean' means that a higher average download RTT strongly increases the likelihood of an interval belonging to the high-risk Cluster 0."
+1. Explain why this metric is important for determining connection stability.
+2. Interpret the sign of the coefficient in relation to the high-risk cluster (Cluster {WORST_CLUSTER_ID}).
 
-Format the output under a heading "## Critical Metric Identification".
+   - Example: "A large negative coefficient for 'rtt_download_mean' means that a higher average download RTT strongly increases the likelihood of an interval belonging to the high-risk Cluster 0."
+
+Format the output under a heading "## Critical Metrics Explanation".
 """,
 
 # ------------------------------------------------------------------
@@ -104,31 +133,32 @@ Format the output under a heading "## Critical Metric Identification".
     "critical_clients":
     """
 ## Inputs
-
-1. Previous Cluster Profile Analysis:
+1. Previous Cluster Profile Analysis (worst cluster is {WORST_CLUSTER_ID}):
 
     {PREVIOUS_OUTPUT}
 
-2. Logistic Regression Coefficients for Cluster 1:
+2. Logistic Regression Coefficients for Clients (pre-filtered):
+   - The JSON includes only clients whose absolute coefficients are above the 50th percentile within the client group, and whose coefficient sign points to the high-risk cluster {WORST_CLUSTER_ID}.
 
     ```json
     {DATA_JSON}
     ```
 
 ## Model Reminder
-
-Cluster 0 is the baseline. A negative coefficient indicates a strong association with Cluster 0's behavior. A positive coefficient indicates a strong association with Cluster 1's behavior.
+- Coefficients are for the log-odds of belonging to Cluster 1 (Cluster 0 is the baseline).
+- A negative coefficient increases the odds of Cluster 0; a positive coefficient increases the odds of Cluster 1.
+- Since the data is pre-filtered, all listed clients already point to the high-risk cluster {WORST_CLUSTER_ID} by sign.
 
 ## Task
+For each client in the JSON (do not add clients beyond those provided):
 
-1.  Based on your prior identification of the "High-Risk Profile (Unstable)" cluster, identify the clients most strongly associated with it.
-2.  List the clients whose regression coefficients have the largest magnitude pointing towards the high-risk cluster.
-3.  For each client, provide:
-      - The client's name (e.g., `client07`).
-      - The exact coefficient value.
-      - A one-sentence explanation of why this value is significant (e.g., "This large negative coefficient indicates a strong tendency to exhibit the unstable behavior of Cluster 0.").
+1. Provide the client's name (e.g., `client07`).
+2. Provide the exact coefficient value (with sign).
+3. In one sentence, explain why this value indicates association with the high-risk cluster {WORST_CLUSTER_ID}, referencing the sign logic above.
+4. Order the list by descending absolute coefficient magnitude.
 
-Format the output as a Markdown list under the heading "## Critical Clients Identification".
+Format the output as a Markdown list under the heading:
+"## Critical Clients"
 """,
 
 # ------------------------------------------------------------------
@@ -167,31 +197,32 @@ Produce a subsection titled "Diagnosis of client {CLIENT_ID}".
     "critical_servers":
     """
 ## Inputs
-
-1. Previous Cluster Profile Analysis:
+1. Previous Cluster Profile Analysis (worst cluster is {WORST_CLUSTER_ID}):
 
     {PREVIOUS_OUTPUT}
 
-2. Logistic Regression Coefficients for Cluster 1:
+2. Logistic Regression Coefficients for Servers (pre-filtered):
+   - The JSON includes only servers whose absolute coefficients are above the 50th percentile within the server group, and whose coefficient sign points to the high-risk cluster {WORST_CLUSTER_ID}.
 
     ```json
     {DATA_JSON}
     ```
 
 ## Model Reminder
-
-Cluster 0 is the baseline. A negative coefficient indicates a strong association with Cluster 0's behavior. A positive coefficient indicates a strong association with Cluster 1's behavior.
+- Coefficients are for the log-odds of belonging to Cluster 1 (Cluster 0 is the baseline).
+- A negative coefficient increases the odds of Cluster 0; a positive coefficient increases the odds of Cluster 1.
+- Since the data is pre-filtered, all listed servers already point to the high-risk cluster {WORST_CLUSTER_ID} by sign.
 
 ## Task
+For each server in the JSON (do not add servers beyond those provided):
 
-1.  Based on your prior identification of the "High-Risk Profile (Unstable)" cluster, identify the servers most strongly associated with it.
-2.  List the servers whose regression coefficients have the largest magnitude pointing towards the high-risk cluster.
-3.  For each server, provide:
-      - The server's name (e.g., `gru03`).
-      - The exact coefficient value.
-      - A one-sentence explanation of why this value is significant (e.g., "This large negative coefficient indicates a strong tendency to exhibit the unstable behavior of Cluster 0.").
+1. Provide the server's name (e.g., `gru03`).
+2. Provide the exact coefficient value (with sign).
+3. In one sentence, explain why this value indicates association with the high-risk cluster {WORST_CLUSTER_ID}, referencing the sign logic above.
+4. Order the list by descending absolute coefficient magnitude.
 
-Format the output as a Markdown list under the heading "## Critical Servers Identification".
+Format the output as a Markdown list under the heading:
+"## Critical Servers"
 """,
 
 # ------------------------------------------------------------------
@@ -234,9 +265,9 @@ Produce a subsection titled "Diagnosis of server {SERVER_ID}".
 Consolidate the following analyses in order:
 
 1. Cluster Profile Analysis.
-2. Critical Metrics Identification.
-3. Critical Clients Identification.
-4. Critical Servers Identification.
+2. Most impactful Metrics.
+3. Critical Clients.
+4. Critical Servers.
 5. Individual Diagnoses for each critical client.
 6. Individual Diagnoses for each critical server.
 

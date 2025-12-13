@@ -1,0 +1,71 @@
+## QoS Assessment Report: throughput_download Approach  
+
+### Executive Summary  
+The throughput‑download analysis reveals a clear dichotomy between two stability regimes. Cluster 0, representing the high‑risk segment, exhibits markedly lower download/upload throughput (≈ 450 Mbps) and elevated RTTs (≈ 60 ms). Cluster 1, the low‑risk segment, enjoys healthy bandwidth (≈ 630 Mbps) and low latency (≈ 16 ms). The most influential predictors of instability are the download RTT mean and its standard deviation, followed by the upload RTT mean. Three clients—**client02**, **client07**, and **client13**—are disproportionately associated with Cluster 0, while the server **rnp_rj** is the primary high‑risk endpoint. Immediate remediation should target routing and peering paths that inflate download latency to these clients and server.
+
+---
+
+### Detailed Findings  
+
+#### 1. Cluster Characteristics  
+- **Cluster 0 (High‑Risk)**  
+  - Mean interval duration: 10.6 days (median 6.7 days).  
+  - Throughput: 452 Mbps (download) / 429 Mbps (upload).  
+  - RTT: 59.6 ms (download) / 60.6 ms (upload).  
+  - Event frequency: 0.738 (highly volatile).  
+
+- **Cluster 1 (Low‑Risk)**  
+  - Mean interval duration: 24.3 days (median 19.6 days).  
+  - Throughput: 632 Mbps (download) / 684 Mbps (upload).  
+  - RTT: 16.0 ms (download) / 18.9 ms (upload).  
+  - Event frequency: 0.078 (stable).  
+
+#### 2. Most Critical Clients  
+- **client02** – coefficient **‑1.95**  
+- **client07** – coefficient **‑1.73**  
+- **client13** – coefficient **‑0.61**  
+
+These clients spend the majority of their measurement windows in Cluster 0, indicating persistent instability.
+
+#### 3. Most Critical Server  
+- **rnp_rj** – coefficient **‑1.37**  
+  - The server is the sole endpoint consistently classified as high‑risk across multiple clients.
+
+#### 4. Metrics with Greatest Impact on Stability  
+1. **rtt_download_mean** – coefficient **‑1.454**  
+   - Higher average download latency dramatically increases the odds of being in Cluster 0.  
+2. **rtt_download_std** – coefficient **‑0.994**  
+   - Greater jitter in download latency pushes intervals toward the high‑risk cluster.  
+3. **rtt_upload_mean** – coefficient **‑0.624**  
+   - Elevated upload latency also contributes to instability, though to a lesser extent.  
+4. **rtt_upload_std** – coefficient **+0.897**  
+   - Surprisingly, higher upload jitter is associated with stability, indicating it is not a primary driver of instability.  
+
+Throughput metrics, while differing between clusters, did not appear as strong predictors in the logistic regression and are therefore secondary to RTT characteristics.
+
+---
+
+### Recommended Actions  
+
+- **Routing Analysis**  
+  - Run `traceroute` and `mtr` from the client locations (client02, client07, client13) to **rnp_rj** during high‑risk intervals.  
+  - Compare hop‑by‑hop latency and packet loss with baseline traces to **gru** sites (e.g., gru05) that exhibit stable performance.  
+  - Identify any consistently high‑latency or lossy hops and coordinate with upstream ISPs or BGP peers to adjust routing policies.
+
+- **Peering & BGP Policy Review**  
+  - Examine peering agreements and BGP attributes affecting paths to **rnp_rj**.  
+  - Consider implementing route filtering or traffic engineering to favor lower‑latency paths for the affected clients.
+
+- **Server‑Side Diagnostics**  
+  - From **rnp_rj**, perform reverse traceroutes to the high‑risk clients during Cluster 0 periods.  
+  - Verify that server‑side routing and upstream links are not the bottleneck; if they are, engage with the server’s ISP to optimize downstream paths.
+
+- **Continuous Monitoring**  
+  - Deploy real‑time alerts for download RTT mean > 50 ms and download RTT std > 5 ms on the affected client‑server pairs.  
+  - Log these events to correlate with any subsequent routing changes or network incidents.
+
+- **Throughput Enhancement (Secondary)**  
+  - While RTT is the primary issue, ensure that link capacities are not saturated by monitoring throughput trends.  
+  - If throughput drops below 500 Mbps for extended periods, investigate potential congestion or QoS policy conflicts.
+
+Implementing these steps will directly address the latency‑driven instability identified in the throughput‑download approach, improving overall QoS for the most affected clients and the **rnp_rj** server.
