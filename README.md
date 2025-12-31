@@ -12,35 +12,32 @@ Este repositório contém o código-fonte, datasets e scripts necessários para 
 
 ```
 .
-├── 📂 datasets/ # Conjuntos de dados utilizados
-│ ├── 📂 ts_ndt/ # Séries temporais para cada par cliente-servidor
-│ ├── 📂 ts_ndt_cp/ # Séries temporais rotuladas com os pontos de mudança detectados pelo VWCD
-│ ├── 📂 ts_ndt_results/ # Séries temporais rotuladas com os pontos de mudança, os clusters e as estatísticas locais
-│ ├── 📜 dados_ndt.csv # Extrato do banco de dados de testes NDT para o período analisado
-│ ├── 📜 dados_ndt.parquet # Extrato do banco de dados de testes NDT em formato parquet
-│ ├── 📜 survival_ndt.parquet # Dataset de sobrevivência rotulado com os clusters e outras informações
-│ └── 📜 ts_metadata_ndt.parquet # Informações das séries temporais
+├── 📂 datasets/ # Conjuntos de dados utilizados.
+│ ├── 📂 ts_ndt/ # Séries temporais para cada par cliente-servidor.
+│ ├── 📂 ts_ndt_cp/ # Séries temporais rotuladas com os pontos de mudança detectados pelo VWCD.
+│ ├── 📂 ts_ndt_results/ # Séries temporais rotuladas com os pontos de mudança, os clusters e as estatísticas locais.
+│ ├── 📜 dados_ndt.csv # Extrato do banco de dados de testes NDT para o período analisado.
+│ ├── 📜 dados_ndt.parquet # Extrato do banco de dados de testes NDT em formato parquet.
+│ ├── 📜 survival_ndt.parquet # Dataset de sobrevivência rotulado com os clusters e outras informações.
+│ └── 📜 ts_metadata_ndt.parquet # Informações das séries temporais.
 │
-├── 📂 imgs/ # Imagens dos gráficos gerados
+├── 📂 imgs/ # Imagens dos gráficos gerados.
 │
-├── 📜 cluster_proportions_clients.csv # Tabela contendo as proporções de tempo em cada cluster para cada cliente
-├── 📜 cluster_proportions_servers.csv # Tabela contendo as proporções de tempo em cada cluster para cada servidor
-├── 📜 coefficients.csv # Tabela contendo os coeficientes da regressão logística associados ao cluster 1 de todas as features
-├── 📜 coefficients.json # Tabela de coeficientes em formato JSON, passada para os LLMs
-├── 📜 environment.yml # Arquivo de configuração do ambiente conda
-├── 📜 survmixclust_thr.pkl # Modelo SurvMixClust treinado.
+├── 📂 output_files/ # Arquivos gerados após o processamento pelos algoritmos.
 │
+├── 📜 compute_metrics.ipynb # Jupyter notebook para o cálculo de métricas e estatísticas descritivas dos dados.
+├── 📜 cp_detection_survival_analysis.ipynb # Jupyter notebook contendo a implementação dos métodos VWCD e SurvMixClust.
+├── 📜 create_fake_series_graph.py # Script que gera séries temporais sintéticas para demonstrar a construção do conjunto de intervalos.
+├── 📜 generate_report_gpt.py # Script para interpretação assistida dos resultados utilizando o modelo GPT-5.
+├── 📜 generate_report_local.py # Script para interpretação assistida dos resultados utilizando o modelo gpt-oss-20b.
 ├── 📜 process_results.py # Script com as funções para processar os resultados e rotular os dados
+├── 📜 survmixclust_rtt_upload.pkl # Modelo SurvMixClust treinado, considerando como feature de referência o RTT de upload.
+├── 📜 survmixclust_throughput_download.pkl # Modelo SurvMixClust treinado, considerando como feature de referência a vazão de download.
 ├── 📜 SurvMixClust.py # Script com as funções que implementam o algoritmo SurvMixClust
 ├── 📜 SurvMixClust_utils.py # Script com as funções auxiliares do algoritmo SurvMixClust
 ├── 📜 timeseries_processing.py # Script com as funções de processamento das séries temporais
 ├── 📜 visual_analysis.py # Script com as funções de plotagem dos gráficos
-├── 📜 VWCD.py # Script com as funções que implementam o algoritmo VWCD
-│
-├── 📜 use_example.ipynb # Jupyter notebook contendo a implementação da metodologia proposta
-│
-├── 📜 LICENSE # Arquivo contendo a licença de uso
-└── 📜 README.md # Este arquivo
+└── 📜 VWCD.py # Script com as funções que implementam o algoritmo VWCD
 ```
 
 ## Pré-requisitos
